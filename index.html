@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><title>Amtrak Explorer</title></head>
+<body>
+  <h1>Amtrak Explorer</h1>
+  <ul id="stations"></ul>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+    const supabase = createClient(
+      'https://qfbruzslfbfpaylwbbtq.supabase.co',
+      'sb_publishable_X8190zU7ojvk5T2dPe6eWQ_rKyceVH4'
+    )
+
+    const { data, error } = await supabase
+      .from('stops')
+      .select('stop_name')
+      .limit(10)
+
+    const list = document.getElementById('stations')
+    if (error) {
+      list.innerHTML = `<li>Error: ${error.message}</li>`
+    } else {
+      data.forEach(s => {
+        const li = document.createElement('li')
+        li.textContent = s.stop_name
+        list.appendChild(li)
+      })
+    }
+  </script>
+</body>
+</html>
