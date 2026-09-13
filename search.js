@@ -1,9 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const supabase = createClient(
-  'https://qfbruzslfbfpaylwbbtq.supabase.co',
-  'sb_publishable_X8190zU7ojvk5T2dPe6eWQ_rKyceVH4'
-)
+import { supabase } from './supabaseClient.js'
 
 export async function searchTrains({ query, limit = 20 }) {
   const pattern = `%${query}%`
