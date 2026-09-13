@@ -2,15 +2,7 @@
 <html>
 <head>
   <title>Amtrak Explorer</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
-    #q { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; }
-    h2 { margin: 24px 0 8px; font-size: 14px; text-transform: uppercase; color: #666; }
-    ul { list-style: none; padding: 0; margin: 0; }
-    li { padding: 6px 0; border-bottom: 1px solid #eee; }
-    .meta { color: #888; font-size: 13px; }
-    .status { color: #888; margin-top: 16px; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <h1>Amtrak Explorer</h1>
@@ -18,44 +10,14 @@
   <div id="results"></div>
 
   <script type="module">
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-    const supabase = createClient(
-      'https://qfbruzslfbfpaylwbbtq.supabase.co',
-      'sb_publishable_X8190zU7ojvk5T2dPe6eWQ_rKyceVH4'
-    )
+    import { searchTrains } from './search.js'
+    import { logEvent } from './events.js'
 
     const input = document.getElementById('q')
     const results = document.getElementById('results')
 
     const MIN_CHARS = 2
-    const LIMIT = 20
     const DEBOUNCE_MS = 250
-
-    // Run the two table queries in parallel and hand back plain arrays.
-    async function search(term) {
-      const pattern = `%${term}%`
-
-      const [stopsRes, routesRes] = await Promise.all([
-        supabase
-          .from('stops')
-          .select('stop_id, stop_name, stop_timezone')
-          .ilike('stop_name', pattern)
-          .order('stop_name')
-          .limit(LIMIT),
-        supabase
-          .from('routes')
-          .select('route_id, route_long_name, route_type')
-          .ilike('route_long_name', pattern)
-          .order('route_long_name')
-          .limit(LIMIT),
-      ])
-
-      if (stopsRes.error) throw stopsRes.error
-      if (routesRes.error) throw routesRes.error
-
-      return { stops: stopsRes.data, routes: routesRes.data }
-    }
 
     // GTFS route_type: 2 = train, 3 = bus/thruway. Enough for a label.
     function routeKind(type) {
@@ -64,16 +26,18 @@
       return `type ${type}`
     }
 
-    function render({ stops, routes }) {
-      // Collapse routes that share a name (same route run by several agencies).
+        function render({ stations, routes }, queryId) {
       const routeNames = [...new Set(routes.map(r => r.route_long_name))]
 
       const sections = []
 
-      sections.push(`<h2>Stations (${stops.length})</h2>`)
-      if (stops.length) {
-        sections.push('<ul>' + stops.map(s =>
-          `<li>${s.stop_name} <span class="meta">${s.stop_id} · ${s.stop_timezone ?? ''}</span></li>`
+      sections.push(`<h2>Stations (${stations.length})</h2>`)
+      if (stations.length) {
+        sections.push('<ul>' + stations.map((s, i) =>
+          `<li class="clickable" data-query-id="${queryId}" data-group="station"
+               data-id="${s.stop_id}" data-label="${s.stop_name}" data-position="${i}">
+            ${s.stop_name} <span class="meta">${s.stop_id} · ${s.stop_timezone ?? ''}</span>
+          </li>`
         ).join('') + '</ul>')
       } else {
         sections.push('<p class="status">No matching stations.</p>')
@@ -81,11 +45,13 @@
 
       sections.push(`<h2>Routes (${routeNames.length})</h2>`)
       if (routeNames.length) {
-        // Look up one route_type per name just for the label.
         const kindByName = {}
         routes.forEach(r => { kindByName[r.route_long_name] ??= routeKind(r.route_type) })
-        sections.push('<ul>' + routeNames.map(name =>
-          `<li>${name} <span class="meta">${kindByName[name]}</span></li>`
+        sections.push('<ul>' + routeNames.map((name, i) =>
+          `<li class="clickable" data-query-id="${queryId}" data-group="route"
+               data-id="${name}" data-label="${name}" data-position="${i}">
+            ${name} <span class="meta">${kindByName[name]}</span>
+          </li>`
         ).join('') + '</ul>')
       } else {
         sections.push('<p class="status">No matching routes.</p>')
@@ -106,14 +72,36 @@
         return
       }
 
-      timer = setTimeout(async () => {
+            timer = setTimeout(async () => {
         results.innerHTML = '<p class="status">Searching…</p>'
+        const queryId = crypto.randomUUID()
         try {
-          render(await search(term))
+          const data = await searchTrains({ query: term })
+          render(data, queryId)
+          logEvent('search', {
+            query_id: queryId,
+            query_text: term,
+            stop_count: data.stations.length,
+            route_count: data.routes.length,
+          })
         } catch (err) {
           results.innerHTML = `<p class="status">Error: ${err.message}</p>`
         }
       }, DEBOUNCE_MS)
+    })
+
+    results.addEventListener('click', (event) => {
+      const item = event.target.closest('.clickable')
+      if (!item) return
+
+      logEvent('click', {
+        query_id: item.dataset.queryId,
+        target_type: item.dataset.group,
+        target_id: item.dataset.id,
+        target_label: item.dataset.label,
+        result_position: Number(item.dataset.position),
+        result_group: item.dataset.group,
+      })
     })
   </script>
 </body>
