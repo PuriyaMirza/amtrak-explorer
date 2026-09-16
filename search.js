@@ -1,6 +1,5 @@
-import { supabase } from './supabaseClient.js'
-
-export async function searchTrains({ query, limit = 20 }) {
+export async function searchTrains(supabase, { query, limit = 20 }) {
+  
   const pattern = `%${query}%`
 
   const [stopsRes, routesRes] = await Promise.all([

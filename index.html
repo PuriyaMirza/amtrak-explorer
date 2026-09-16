@@ -12,6 +12,7 @@
   <script type="module">
     import { searchTrains } from './search.js'
     import { logEvent } from './events.js'
+    import { supabase } from './supabaseClient.js'
 
     const input = document.getElementById('q')
     const results = document.getElementById('results')
@@ -76,7 +77,7 @@
         results.innerHTML = '<p class="status">Searching…</p>'
         const queryId = crypto.randomUUID()
         try {
-          const data = await searchTrains({ query: term })
+          const data = await searchTrains(supabase, { query: term })
           render(data, queryId)
           logEvent('search', {
             query_id: queryId,
