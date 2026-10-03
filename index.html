@@ -9,6 +9,13 @@
   <input id="q" type="text" placeholder="Search stations and routes…" autocomplete="off" />
   <div id="results"></div>
 
+  <h2 class="ask-heading">Ask in plain English</h2>
+  <form id="ask-form">
+    <input id="ask-input" type="text" placeholder="e.g. what trains go through Chicago?" autocomplete="off" />
+    <button id="ask-button" type="submit">Ask</button>
+  </form>
+  <div id="ask-results"></div>
+
   <script type="module">
     import { searchTrains } from './search.js'
     import { logEvent } from './events.js'
@@ -103,6 +110,56 @@
         result_position: Number(item.dataset.position),
         result_group: item.dataset.group,
       })
+    })
+
+    // ---- Natural-language ask ----
+    // Posts the question to our own serverless function. That function holds
+    // the secret API key and runs the real database query, so the model can
+    // only ever describe rows that actually came back.
+    const askForm = document.getElementById('ask-form')
+    const askInput = document.getElementById('ask-input')
+    const askButton = document.getElementById('ask-button')
+    const askResults = document.getElementById('ask-results')
+
+    askForm.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const question = askInput.value.trim()
+
+      if (!question) {
+        askResults.innerHTML = '<p class="status error">Type a question first.</p>'
+        return
+      }
+
+      askButton.disabled = true
+      askResults.innerHTML = '<p class="status">Thinking…</p>'
+
+      try {
+        const res = await fetch('/api/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question }),
+        })
+        const data = await res.json()
+
+        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+
+        const parts = [`<p class="answer">${data.answer}</p>`]
+
+        // Show what the model actually looked up. This is the transparency
+        // that makes the eval work possible later.
+        if (data.toolCalls?.length) {
+          parts.push('<p class="status">Searched for: ' +
+            data.toolCalls.map(c => `<code>${c.query}</code>`).join(', ') + '</p>')
+        } else {
+          parts.push('<p class="status">Answered without searching.</p>')
+        }
+
+        askResults.innerHTML = parts.join('')
+      } catch (err) {
+        askResults.innerHTML = `<p class="status error">Error: ${err.message}</p>`
+      } finally {
+        askButton.disabled = false
+      }
     })
   </script>
 </body>
