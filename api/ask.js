@@ -12,9 +12,11 @@ const SEARCH_TOOL = {
     'Search for Amtrak stations and routes by name. Matches partial, ' +
     'case-insensitive text against station names (e.g. "Chicago Union Station") ' +
     'and route names (e.g. "Acela", "Lake Shore Limited"). Each matched station ' +
-    'includes a "routes" list of every route that actually serves it. Use this ' +
-    'whenever the user mentions a specific city, station, or train/route name, ' +
-    'including questions like "what trains go through X".',
+    'includes a "routes" list of every route that actually serves it, and each ' +
+    'matched route includes a "stops" list of every station it actually serves. ' +
+    'Use this whenever the user mentions a specific city, station, or ' +
+    'train/route name, including questions like "what trains go through X" or ' +
+    '"what stations does Y serve".',
   input_schema: {
     type: 'object',
     properties: {
@@ -84,7 +86,6 @@ export default async function handler(req, res) {
             query: toolUse.input.query,
             limit: RESULT_LIMIT,
           })
-          const routeNames = [...new Set(data.routes.map((r) => r.route_long_name))]
           result = {
             stations: data.stations.map((s) => ({
               id: s.stop_id,
@@ -92,7 +93,10 @@ export default async function handler(req, res) {
               timezone: s.stop_timezone,
               routes: s.routes,
             })),
-            routes: routeNames,
+            routes: data.routes.map((r) => ({
+              name: r.route_long_name,
+              stops: r.stops,
+            })),
           }
           toolCalls.push({ query: toolUse.input.query, result })
         } catch (err) {

@@ -29,10 +29,23 @@ export async function searchTrains(sql, { query, limit = 20 }) {
       limit ${limit}
     `,
     sql`
-      select route_id, route_long_name, route_type
-      from routes
-      where route_long_name ilike ${pattern}
-      order by route_long_name
+      select
+        r.route_id,
+        r.route_long_name,
+        r.route_type,
+        coalesce(
+          (
+            select array_agg(distinct s.stop_name order by s.stop_name)
+            from trips t
+            join stop_times st on st.trip_id = t.trip_id
+            join stops s on s.stop_id = st.stop_id
+            where t.route_id = r.route_id
+          ),
+          '{}'
+        ) as stops
+      from routes r
+      where r.route_long_name ilike ${pattern}
+      order by r.route_long_name
       limit ${limit}
     `,
   ])
