@@ -9,10 +9,23 @@ export async function searchTrains(sql, { query, limit = 20 }) {
   // depends on the other.
   const [stations, routes] = await Promise.all([
     sql`
-      select stop_id, stop_name, stop_timezone
-      from stops
-      where stop_name ilike ${pattern}
-      order by stop_name
+      select
+        s.stop_id,
+        s.stop_name,
+        s.stop_timezone,
+        coalesce(
+          (
+            select array_agg(distinct r.route_long_name order by r.route_long_name)
+            from stop_times st
+            join trips t on t.trip_id = st.trip_id
+            join routes r on r.route_id = t.route_id
+            where st.stop_id = s.stop_id
+          ),
+          '{}'
+        ) as routes
+      from stops s
+      where s.stop_name ilike ${pattern}
+      order by s.stop_name
       limit ${limit}
     `,
     sql`

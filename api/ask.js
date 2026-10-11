@@ -10,8 +10,10 @@ const SEARCH_TOOL = {
   description:
     'Search for Amtrak stations and routes by name. Matches partial, ' +
     'case-insensitive text against station names (e.g. "Chicago Union Station") ' +
-    'and route names (e.g. "Acela", "Lake Shore Limited"). Use this whenever the ' +
-    'user mentions a specific city, station, or train/route name.',
+    'and route names (e.g. "Acela", "Lake Shore Limited"). Each matched station ' +
+    'includes a "routes" list of every route that actually serves it. Use this ' +
+    'whenever the user mentions a specific city, station, or train/route name, ' +
+    'including questions like "what trains go through X".',
   input_schema: {
     type: 'object',
     properties: {
@@ -81,6 +83,7 @@ export default async function handler(req, res) {
               id: s.stop_id,
               name: s.stop_name,
               timezone: s.stop_timezone,
+              routes: s.routes,
             })),
             routes: routeNames,
           }
