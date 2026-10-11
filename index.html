@@ -143,7 +143,13 @@
 
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
 
-        const parts = [`<p class="answer">${data.answer}</p>`]
+        // Escape before inserting: the answer is model output, and raw
+        // innerHTML with untrusted text is the shape of an XSS bug.
+        const escapeHtml = (str) => str.replace(/[&<>"']/g, (c) => (
+          { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ))
+
+        const parts = [`<p class="answer">${escapeHtml(data.answer)}</p>`]
 
         // Show what the model actually looked up. This is the transparency
         // that makes the eval work possible later.

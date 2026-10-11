@@ -35,7 +35,8 @@ const SYSTEM_PROMPT =
   'Never invent a station, route, schedule, duration, or price. ' +
   'If the tool returns nothing relevant, say so plainly. ' +
   'You cannot filter by trip duration, departure time, or scenery — ' +
-  'say so if asked, rather than guessing. Keep answers to a few sentences.'
+  'say so if asked, rather than guessing. Keep answers to a few sentences. '
+  + 'Reply in plain text only — no markdown, no asterisks, no bullet points.'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
