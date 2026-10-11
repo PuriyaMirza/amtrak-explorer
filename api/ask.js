@@ -4,6 +4,7 @@ import { searchTrains } from '../search.js'
 
 const MODEL = 'claude-sonnet-5-5'
 const RESULT_LIMIT = 10
+const MAX_ROUNDS = 4
 
 const SEARCH_TOOL = {
   name: 'search_trains',
@@ -54,18 +55,24 @@ export default async function handler(req, res) {
     const messages = [{ role: 'user', content: question }]
     const toolCalls = []
 
-    // Round 1: ask Claude. It either answers, or asks to call the tool.
-    let response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      tools: [SEARCH_TOOL],
-      messages,
-    })
+    // Claude can ask for the tool more than once per question (e.g. a
+    // two-place question like "New York to Boston" often needs a follow-up
+    // search after seeing the first results). Loop until it stops asking
+    // for the tool, up to MAX_ROUNDS so a confused model can't run forever.
+    let response
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        tools: [SEARCH_TOOL],
+        messages,
+      })
 
-    // Round 2: if it asked for the tool, WE run the real query, then hand
-    // the real rows back so it can only describe what actually exists.
-    if (response.stop_reason === 'tool_use') {
+      if (response.stop_reason !== 'tool_use') break
+
+      // WE run the real query, then hand the real rows back so Claude can
+      // only describe what actually exists.
       const toolUses = response.content.filter((c) => c.type === 'tool_use')
       messages.push({ role: 'assistant', content: response.content })
 
@@ -101,14 +108,6 @@ export default async function handler(req, res) {
       }
 
       messages.push({ role: 'user', content: toolResults })
-
-      response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        tools: [SEARCH_TOOL],
-        messages,
-      })
     }
 
     const answer = response.content
@@ -117,7 +116,10 @@ export default async function handler(req, res) {
       .join('\n')
       .trim()
 
-    return res.status(200).json({ answer, toolCalls })
+    return res.status(200).json({
+      answer: answer || "I wasn't able to put together an answer — try rephrasing the question.",
+      toolCalls,
+    })
   } catch (err) {
     console.error('ask handler failed:', err)
     return res.status(500).json({ error: err.message })
