@@ -1,9 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { neon } from '@neondatabase/serverless'
 import { searchTrains } from '../search.js'
-
-const SUPABASE_URL = 'https://qfbruzslfbfpaylwbbtq.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_X8190zU7ojvk5T2dPe6eWQ_rKyceVH4'
 
 const MODEL = 'claude-sonnet-5-5'
 const RESULT_LIMIT = 10
@@ -50,7 +47,7 @@ export default async function handler(req, res) {
 
   try {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const sql = neon(process.env.DATABASE_URL)
 
     const messages = [{ role: 'user', content: question }]
     const toolCalls = []
@@ -74,7 +71,7 @@ export default async function handler(req, res) {
       for (const toolUse of toolUses) {
         let result
         try {
-          const data = await searchTrains(supabase, {
+          const data = await searchTrains(sql, {
             query: toolUse.input.query,
             limit: RESULT_LIMIT,
           })

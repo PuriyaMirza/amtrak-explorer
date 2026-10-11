@@ -12,6 +12,6 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
-    "@supabase/supabase-js": "^2.117.2"
+    "@neondatabase/serverless": "^1.2.0"
   }
 }
