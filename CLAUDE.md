@@ -69,11 +69,45 @@ index.html          search UI + natural-language ask UI; no DB client
 search.js           searchTrains(sql, {query, limit}) — SINGLE SOURCE OF TRUTH
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget
 styles.css
+ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool loop,
+                    plus MODEL, PROMPT_VERSION and the prompt/tool constants
 api/search.js       GET  /api/search?q=   → searchTrains
 api/log.js          POST /api/log         → inserts one events row
-api/ask.js          POST /api/ask         → Claude tool-calling loop
+api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
+                    builds clients from env) → askQuestion
+eval/cases.js       40 eval cases (easy / ambiguous / adversarial / schedule)
+eval/score.js       scoreCase() — deterministic checks, no LLM judge
+eval/taxonomy.js    check → named failure type (hallucinated-entity, ...)
+eval/runner.js      runCases(), chooseMode() — the loop, testable with a fake ask
+eval/results.js     formats/appends rows of eval/RESULTS.md
+eval/run.js         CLI: `npm run eval`
+eval/RESULTS.md     run log, one row per eval run (header explains columns)
+test/               `npm test` (node:test, no network)
 sql/                schema history (SEE WARNING BELOW)
 ```
+
+### Running evals
+
+```bash
+vercel env pull .env.local   # once; DATABASE_URL + ANTHROPIC_API_KEY, git-ignored
+npm run eval                 # local mode: calls askQuestion in-process, appends a row to eval/RESULTS.md
+npm run eval -- --no-record  # same, without writing a row
+ASK_URL=http://localhost:3000/api/ask npm run eval   # remote mode (vercel dev); the deployed site is behind SSO
+npm test                     # unit tests only; free, no network
+```
+
+Evals make ~40+ real model calls (a few tens of cents). Run them on demand,
+never in CI.
+
+Exit codes: `npm run eval` exits 0 even when some cases fail (it passes
+`--allow-failures` so npm doesn't print an error block on top of the results;
+failures are still listed and recorded). `node eval/run.js` directly exits 1 if
+any case failed, which is expected at baseline (the schedule cases). Either way,
+2 = setup problem (missing/empty env vars) and 3 = every request errored (bad
+key, spend limit, SSO), in which case nothing is written to RESULTS.md.
+`vercel env pull` writes empty values for Sensitive variables; if the runner
+says a variable is EMPTY, paste the real value into `.env.local`. The `schedule` cases are expected to fail until the schedule
+tools exist; that failure is the recorded baseline.
 
 ### The architecture rule
 
