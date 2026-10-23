@@ -22,7 +22,7 @@ against.
 
 ### Non-goals (this phase)
 - Connections (multi-train trips). Too error-prone; stays parked.
-- Browse UI growth (filters, map, weekend finder). The browse screen stays as is.
+- Browse UI growth (filters, map, weekend finder). The browse screen stays as is this phase; all three are committed for the next phase (§7).
 - Text-to-SQL. The model never writes SQL.
 - Public access. The site stays behind Vercel SSO; revisit at write-up time.
 - Weather tool, fares, live delays, LLM-as-judge scoring.
@@ -34,7 +34,7 @@ against.
 | D1 | Order: evals → logging → schedule tools → weekend tool | Puriya |
 | D2 | New question types: times/durations, weekday-specific, weekend pairing | Puriya |
 | D3 | Few narrow fixed-SQL tools; model never writes SQL | Puriya (security) |
-| D4 | Browse UI left as is | Puriya |
+| D4 | Browse UI left as is this phase; filters + map + weekend finder next phase | Puriya |
 | D5 | Anthropic spend < $5/month; hard limit set in Anthropic console; evals run on demand only, never in CI | Puriya (cost) |
 | D6 | Access: keep Vercel SSO; decide public access at write-up time | Puriya (security) |
 | D7 | One pinned model (`claude-sonnet-5-5`) for app and evals | Puriya (cost) |
@@ -114,3 +114,12 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
   locally at two checkpoints (baseline after PR 1; after PR 4). About $0.50–1 per run (a guess).
 - **No holiday data:** answers must say so.
 - **String checks are brittle on prose:** prefer `toolCalls` structure checks where possible.
+
+## 7. Next phase (committed, not yet specced)
+
+Browse screen growth. All three were requested; the order and details get decided when this phase ships.
+- **Filters:** time of day, route.
+- **Map:** station pins from `stops.stop_lat`/`stop_lon`.
+- **Weekend finder:** pick a weekend and see destinations with Fri-out/Sun-back train pairs. Reuses PR 4's `planWeekend`.
+
+Design implication for this phase: keep `schedule.js` and `planWeekend` free of AI-specific shapes, so the browse UI can call them through a plain `/api/` endpoint later.
