@@ -7,6 +7,26 @@ import { failureTypeOf } from './taxonomy.js'
 export const REFUSAL_PATTERN =
   /\b(can['’]?t|cannot|no\s+amtrak|doesn['’]?t\s+(serve|have|connect)|does\s+not\s+(serve|have|connect)|isn['’]?t\s+(served|possible)|no\s+(direct\s+)?(train|route|rail)|not\s+(possible|available)|no\s+matching)\b/i
 
+// A correct schedule answer is told (system prompt, v2) to add a caveat like
+// "I can't account for holiday schedules, so confirm on amtrak.com". That
+// sentence contains "can't", which REFUSAL_PATTERN reads as a refusal, so a
+// right answer would fail noRefusal for doing what it was told.
+//
+// Fix: noRefusal ignores sentences about holidays and tests the rest. Why not
+// "pass if the answer contains an expected time" instead? Because that would
+// also pass "I can't look that up, but maybe the 6:53?", which IS a refusal,
+// and some cases have no expected time at all. Why not narrow REFUSAL_PATTERN
+// itself? It has to keep matching "I can't ..." for the refusal cases.
+// Limit: a sentence that mixes a holiday caveat with a real refusal is
+// skipped as a whole; the other checks on those cases (anyOfTimes,
+// toolCalled) still catch an answer with no real content.
+export function withoutHolidayCaveats(answer) {
+  return answer
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((sentence) => !/holiday/i.test(sentence))
+    .join(' ')
+}
+
 // True if at least one entry in the group matches the answer. A string entry
 // is a case-insensitive substring. A RegExp entry is tested against the
 // answer as written; use one when a substring would match too much (e.g.
@@ -60,9 +80,10 @@ export function scoreCase(caseDef, { answer, toolCalls }) {
     add('declineConstraint', 'declineConstraint', REFUSAL_PATTERN.test(answer || ''))
   }
 
-  // The mirror image of refusalExpected: the answer must NOT read as a refusal.
+  // The mirror image of refusalExpected: the answer must NOT read as a
+  // refusal. Holiday caveats are exempt (see withoutHolidayCaveats).
   if (checks.noRefusal) {
-    add('noRefusal', 'noRefusal', !REFUSAL_PATTERN.test(answer || ''))
+    add('noRefusal', 'noRefusal', !REFUSAL_PATTERN.test(withoutHolidayCaveats(answer || '')))
   }
 
   if (checks.toolQueriesInclude) {

@@ -4,7 +4,7 @@ import { createHandler } from '../api/ask.js'
 import { buildAskMetadata, logAsk, UNKNOWN_ID } from '../ask-log.js'
 import { INSERTABLE_COLUMNS } from '../event-store.js'
 import { MODEL, PROMPT_VERSION } from '../ask-core.js'
-import { mockRes, fakeAnthropic, fakeSql, toolUseResponse, textResponse } from './helpers.js'
+import { mockRes, fakeAnthropic, fakeSql, toolUseResponse, toolUseFor, textResponse } from './helpers.js'
 
 const STATIONS = [{ stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York', routes: ['Acela'] }]
 
@@ -124,4 +124,41 @@ test('buildAskMetadata: tool error and failed-ask shapes', () => {
   })
   assert.deepEqual(m.tool_calls, [{ name: 'search_trains', input: { query: 'x' }, error: 'boom' }])
   assert.deepEqual(buildAskMetadata({ error: 'bad', latencyMs: 7 }), { latency_ms: 7, error: 'bad' })
+})
+
+test('a find_trains call logs its full input and its row_count (not search_trains\' shape)', async () => {
+  const input = { from: 'New York', to: 'BOS', date: '2026-10-29', departAfter: '05:00' }
+  const anthropic = fakeAnthropic([toolUseFor('find_trains', input), textResponse('Train 66 at 5:44 AM.')])
+  const hms = (h, m) => h * 3600 + m * 60
+  const days = { sunday: 0, monday: 0, tuesday: 0, wednesday: 1, thursday: 1, friday: 0, saturday: 0 }
+  const legs = {
+    'NYP>BOS': [
+      { train: '66', route: 'Northeast Regional', dep_secs: hms(29, 44), arr_secs: hms(34, 5), can_board: true, can_alight: true, ...days, start_date: 20260906, end_date: 20270906 },
+      { train: '1150', route: 'Northeast Regional', dep_secs: hms(6, 53), arr_secs: hms(11, 7), can_board: true, can_alight: true, ...days, start_date: 20260906, end_date: 20270906 },
+    ],
+  }
+  const stops = [
+    { stop_id: 'NYP', stop_name: 'Ny Moynihan Train Hall At Penn Station', stop_timezone: 'America/New_York' },
+    { stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York' },
+  ]
+  const sql = fakeSql({ stops, legs })
+  const ask = createHandler({ makeClients: () => ({ anthropic, sql }) })
+  await ask({ method: 'POST', body: { question: 'First train?', device_id: 'd', session_id: 's' } }, mockRes())
+
+  const m = rowOf(sql.inserts[0]).metadata
+  // Full input object, and the number of trains the model was shown.
+  assert.deepEqual(m.tool_calls, [{ name: 'find_trains', input, row_count: 2 }])
+  // No train rows are stored.
+  assert.ok(!JSON.stringify(m).includes('Northeast Regional'))
+})
+
+test('a failed find_trains call logs its input and the error', () => {
+  const m = buildAskMetadata({
+    result: {
+      answer: 'x', rounds: 2, model: 'm', promptVersion: 'v2',
+      toolCalls: [{ name: 'find_trains', input: { from: 'NYP', to: 'BOS', date: 'bad' }, error: 'bad date' }],
+    },
+    latencyMs: 1,
+  })
+  assert.deepEqual(m.tool_calls, [{ name: 'find_trains', input: { from: 'NYP', to: 'BOS', date: 'bad' }, error: 'bad date' }])
 })

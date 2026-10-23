@@ -5,19 +5,24 @@ import {
   MODEL,
   PROMPT_VERSION,
   SYSTEM_PROMPT,
+  systemPromptFor,
   SEARCH_TOOL,
+  FIND_TRAINS_TOOL,
+  TOOLS,
   MAX_ROUNDS,
+  TRAIN_RESULT_LIMIT,
+  TRAIN_RESULT_MAX,
 } from '../ask-core.js'
-import { fakeAnthropic, fakeSql, toolUseResponse, textResponse } from './helpers.js'
+import { fakeAnthropic, fakeSql, toolUseResponse, toolUseFor, textResponse } from './helpers.js'
 
 const BOSTON_STATIONS = [
   { stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York', routes: ['Acela'] },
 ]
 const BOSTON_ROUTES = [{ route_long_name: 'Acela', stops: ['Boston', 'New Haven'] }]
 
-test('constants: model is pinned and prompt version starts at v1', () => {
+test('constants: model is pinned and the prompt version is v2 (find_trains added)', () => {
   assert.equal(MODEL, 'claude-sonnet-5-5')
-  assert.equal(PROMPT_VERSION, 'v1')
+  assert.equal(PROMPT_VERSION, 'v2')
 })
 
 test('tool_use then text: runs the real query and returns the full result shape', async () => {
@@ -38,6 +43,10 @@ test('tool_use then text: runs the real query and returns the full result shape'
   assert.equal(result.toolCalls.length, 1)
   assert.equal(result.toolCalls[0].name, 'search_trains')
   assert.equal(result.toolCalls[0].query, 'boston')
+  // The full input the model sent is recorded (the ask logger stores it), and
+  // so is how many rows came back.
+  assert.deepEqual(result.toolCalls[0].input, { query: 'boston' })
+  assert.equal(result.toolCalls[0].rowCount, 2)
   assert.deepEqual(result.toolCalls[0].result.stations, [
     { id: 'BOS', name: 'Boston', timezone: 'America/New_York', routes: ['Acela'] },
   ])
@@ -50,14 +59,18 @@ test('tool_use then text: runs the real query and returns the full result shape'
   assert.ok(sql.calls.every((c) => c.values.includes('%boston%')))
 })
 
-test('the first request carries the pinned model, system prompt and tool', async () => {
+test('the first request carries the pinned model, system prompt (with today) and both tools', async () => {
   const anthropic = fakeAnthropic([textResponse('hi')])
-  await askQuestion({ anthropic, sql: fakeSql(), question: 'hello' })
+  const now = new Date('2026-10-23T16:00:00Z')
+  await askQuestion({ anthropic, sql: fakeSql(), question: 'hello', now })
 
   const [req] = anthropic.calls
   assert.equal(req.model, MODEL)
-  assert.equal(req.system, SYSTEM_PROMPT)
-  assert.deepEqual(req.tools, [SEARCH_TOOL])
+  assert.equal(req.system, systemPromptFor(now))
+  assert.ok(req.system.startsWith(SYSTEM_PROMPT))
+  assert.match(req.system, /Today is friday 2026-10-23 \(US Eastern time\)\.$/)
+  assert.deepEqual(req.tools, [SEARCH_TOOL, FIND_TRAINS_TOOL])
+  assert.deepEqual(req.tools, TOOLS)
   assert.deepEqual(req.messages, [{ role: 'user', content: 'hello' }])
 })
 
@@ -127,4 +140,143 @@ test('multiple text blocks are joined and trimmed', async () => {
   ])
   const result = await askQuestion({ anthropic, sql: fakeSql(), question: 'q' })
   assert.equal(result.answer, 'Part one.\nPart two.')
+})
+
+// ---------------------------------------------------------------------------
+// PR 3: the find_trains tool and the v2 prompt
+// ---------------------------------------------------------------------------
+
+const hms = (h, m) => h * 3600 + m * 60
+const THU = { sunday: 0, monday: 0, tuesday: 0, wednesday: 0, thursday: 1, friday: 0, saturday: 0 }
+const WED = { ...THU, thursday: 0, wednesday: 1 }
+const legRow = (train, route, dep, arr, days) => ({
+  train, route, dep_secs: dep, arr_secs: arr, can_board: true, can_alight: true,
+  ...days, start_date: 20260906, end_date: 20270906,
+})
+const STOPS = [
+  { stop_id: 'NYP', stop_name: 'Ny Moynihan Train Hall At Penn Station', stop_timezone: 'America/New_York' },
+  { stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York' },
+]
+const NYP_BOS = [
+  legRow('66', 'Northeast Regional', hms(29, 44), hms(34, 5), WED),
+  legRow('1150', 'Northeast Regional', hms(6, 53), hms(11, 7), THU),
+]
+const NOW = new Date('2026-10-23T16:00:00Z')
+
+test('find_trains: the model calls it, the real trains reach the next turn, the call is recorded', async () => {
+  const input = { from: 'New York', to: 'BOS', date: '2026-10-29' }
+  const anthropic = fakeAnthropic([
+    toolUseFor('find_trains', input, { id: 'tu_ft' }),
+    textResponse('The first train is 66 at 5:44 AM Eastern.'),
+  ])
+  const sql = fakeSql({ stops: STOPS, legs: { 'NYP>BOS': NYP_BOS } })
+
+  const result = await askQuestion({ anthropic, sql, question: 'First train to Boston on Thursday?', now: NOW })
+
+  assert.equal(result.answer, 'The first train is 66 at 5:44 AM Eastern.')
+  assert.equal(result.rounds, 2)
+
+  // Recorded for the eval (name), and for the logger (full input, row count).
+  const call = result.toolCalls[0]
+  assert.equal(call.name, 'find_trains')
+  assert.deepEqual(call.input, input)
+  assert.equal(call.rowCount, 2)
+  assert.equal(call.query, undefined) // search_trains-only field
+  assert.equal(call.result.trains[0].train, '66')
+
+  // The REAL rows went back to the model as the tool_result.
+  const last = anthropic.calls[1].messages.at(-1)
+  assert.equal(last.content[0].tool_use_id, 'tu_ft')
+  const sent = JSON.parse(last.content[0].content)
+  assert.equal(sent.trains[0].train, '66')
+  assert.equal(sent.trains[0].depart, '5:44 AM')
+  assert.equal(sent.summary.count, 2)
+  assert.ok(sent.notes.some((n) => /Holiday schedules are not modelled/.test(n)))
+})
+
+test('find_trains: bad input comes back to the model as an error, not a crash', async () => {
+  const anthropic = fakeAnthropic([
+    toolUseFor('find_trains', { from: 'NYP', to: 'BOS', date: 'next thursday' }),
+    textResponse('Sorry, which date?'),
+  ])
+  const result = await askQuestion({ anthropic, sql: fakeSql({ stops: STOPS }), question: 'q', now: NOW })
+
+  assert.equal(result.answer, 'Sorry, which date?')
+  assert.match(result.toolCalls[0].error, /YYYY-MM-DD/)
+  assert.equal(result.toolCalls[0].name, 'find_trains')
+  assert.deepEqual(result.toolCalls[0].input, { from: 'NYP', to: 'BOS', date: 'next thursday' })
+  assert.match(anthropic.calls[1].messages.at(-1).content[0].content, /YYYY-MM-DD/)
+})
+
+test('find_trains: the result is row-capped (default 12, never above 20), summary still covers all', async () => {
+  // 30 weekday trains, one every 10 minutes from 6:00.
+  const many = Array.from({ length: 30 }, (_, i) =>
+    legRow(String(100 + i), 'Northeast Regional', hms(6, 0) + i * 600, hms(10, 0) + i * 600, THU),
+  )
+  const run = async (extra) => {
+    const anthropic = fakeAnthropic([
+      toolUseFor('find_trains', { from: 'NYP', to: 'BOS', date: '2026-10-29', ...extra }),
+      textResponse('ok'),
+    ])
+    const sql = fakeSql({ stops: STOPS, legs: { 'NYP>BOS': many } })
+    const result = await askQuestion({ anthropic, sql, question: 'q', now: NOW })
+    return result.toolCalls[0]
+  }
+
+  const dflt = await run({})
+  assert.equal(TRAIN_RESULT_LIMIT, 12)
+  assert.equal(dflt.result.trains.length, 12)
+  assert.equal(dflt.rowCount, 12)
+  assert.equal(dflt.result.summary.count, 30)
+  assert.equal(dflt.result.summary.latest.train, '129') // the last train is still known
+
+  const greedy = await run({ limit: 100 })
+  assert.equal(TRAIN_RESULT_MAX, 20)
+  assert.equal(greedy.result.trains.length, 20)
+
+  const few = await run({ limit: 3 })
+  assert.equal(few.result.trains.length, 3)
+})
+
+test('both tools can be used in one question, and each round re-sends the tools', async () => {
+  const anthropic = fakeAnthropic([
+    toolUseResponse('boston', { id: 'tu_a' }),
+    toolUseFor('find_trains', { from: 'NYP', to: 'BOS', date: '2026-10-29' }, { id: 'tu_b' }),
+    textResponse('Done.'),
+  ])
+  const sql = fakeSql({ stations: [], routes: [], stops: STOPS, legs: { 'NYP>BOS': NYP_BOS } })
+  const result = await askQuestion({ anthropic, sql, question: 'q', now: NOW })
+  assert.deepEqual(result.toolCalls.map((c) => c.name), ['search_trains', 'find_trains'])
+  assert.ok(anthropic.calls.every((c) => c.tools.length === 2))
+})
+
+test('an unknown tool name is reported back, not executed', async () => {
+  const anthropic = fakeAnthropic([toolUseFor('drop_tables', {}), textResponse('no')])
+  const sql = fakeSql()
+  const result = await askQuestion({ anthropic, sql, question: 'q', now: NOW })
+  assert.match(result.toolCalls[0].error, /unknown tool/)
+  assert.equal(sql.calls.length, 0)
+})
+
+test('the v2 prompt: grounding rule, holiday caveat, Eastern time, no stale "cannot filter by time" line', () => {
+  assert.match(SYSTEM_PROMPT, /ONLY state stations, routes, train numbers, times and durations that a tool returned/)
+  assert.match(SYSTEM_PROMPT, /holiday schedules are not modelled/)
+  assert.match(SYSTEM_PROMPT, /amtrak\.com/)
+  assert.match(SYSTEM_PROMPT, /Eastern/)
+  assert.doesNotMatch(SYSTEM_PROMPT, /cannot filter by trip duration/)
+  // The prompt-injection eval case looks for these phrases leaking.
+  assert.ok(SYSTEM_PROMPT.includes('You help people explore Amtrak'))
+  assert.ok(SYSTEM_PROMPT.includes('Never invent a station'))
+})
+
+test('systemPromptFor: today is New York today (evening there is still the same day)', () => {
+  assert.match(systemPromptFor(new Date('2026-10-24T02:00:00Z')), /Today is friday 2026-10-23/)
+  assert.match(systemPromptFor(new Date('2026-10-24T05:00:00Z')), /Today is saturday 2026-10-24/)
+})
+
+test('find_trains tool definition: required inputs and weekday enum', () => {
+  assert.equal(FIND_TRAINS_TOOL.name, 'find_trains')
+  assert.deepEqual(FIND_TRAINS_TOOL.input_schema.required, ['from', 'to'])
+  assert.deepEqual(FIND_TRAINS_TOOL.input_schema.properties.weekday.enum.length, 7)
+  assert.match(FIND_TRAINS_TOOL.description, /first\/last\/fastest/)
 })
