@@ -280,3 +280,32 @@ test('find_trains tool definition: required inputs and weekday enum', () => {
   assert.deepEqual(FIND_TRAINS_TOOL.input_schema.properties.weekday.enum.length, 7)
   assert.match(FIND_TRAINS_TOOL.description, /first\/last\/fastest/)
 })
+
+test('find_trains: only whitelisted fields reach schedule.js; a model-supplied "today" is ignored', async () => {
+  // Real "today" (injected) is Friday 2026-10-23, so weekday "thursday" must
+  // mean 2026-10-29. The model tries to say today is 2026-11-19.
+  const anthropic = fakeAnthropic([
+    toolUseFor('find_trains', { from: 'NYP', to: 'BOS', weekday: 'thursday', today: '2026-11-19', extra: 'x' }),
+    textResponse('ok'),
+  ])
+  const sql = fakeSql({ stops: STOPS, legs: { 'NYP>BOS': NYP_BOS } })
+  const result = await askQuestion({ anthropic, sql, question: 'q', now: NOW })
+
+  const sent = result.toolCalls[0].result
+  assert.equal(sent.date, '2026-10-29') // from the injected now, not the model's today
+  assert.equal(sent.dateSource, 'next-weekday')
+  // What the model sent is still logged as-is (it is what it asked for).
+  assert.equal(result.toolCalls[0].input.today, '2026-11-19')
+
+  // And a different injected clock moves the answer: Saturday 2026-10-31.
+  const later = fakeAnthropic([
+    toolUseFor('find_trains', { from: 'NYP', to: 'BOS', weekday: 'thursday', today: '2026-10-01' }),
+    textResponse('ok'),
+  ])
+  const r2 = await askQuestion({ anthropic: later, sql, question: 'q', now: new Date('2026-10-31T16:00:00Z') })
+  assert.equal(r2.toolCalls[0].result.date, '2026-11-05')
+})
+
+test('the prompt tells the model to state the date it used for a weekday-only question', () => {
+  assert.match(SYSTEM_PROMPT, /gave a weekday but no date, state the date you used/)
+})

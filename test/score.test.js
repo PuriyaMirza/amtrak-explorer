@@ -142,16 +142,20 @@ test('noRefusal: a correct answer with a holiday caveat is NOT a refusal', () =>
   const caveat = "I can't account for holidays, so please confirm on amtrak.com."
   for (const answer of [
     `The first train is 66 at 5:44 AM Eastern. ${caveat}`,
-    `Train 66 leaves at 5:44 AM. Holiday schedules aren't modelled and I cannot see them, so check amtrak.com.`,
+    `Train 66 leaves at 5:44 AM. Holiday schedules aren't modelled, so check amtrak.com.`,
+    'Train 66 leaves at 5:44 AM Eastern. I cannot account for holiday schedules, so please confirm on amtrak.com.',
     `The first train is 66 at 5:44 AM.\n${caveat}`,
   ]) {
     assert.equal(score(checks, { answer }).pass, true, answer)
   }
 })
 
-test('noRefusal: real refusals still fail, even with a holiday sentence attached', () => {
+test('noRefusal: real refusals still fail, even when they mention holidays', () => {
   const checks = { noRefusal: true }
   for (const answer of [
+    // The two QA examples: the refusal is IN the same sentence as the holiday words.
+    "I can't look that up because holiday schedules are not modelled.",
+    "I can't give you times, since holiday schedules aren't modelled.",
     "I can't look up train schedules.",
     "I can't find a direct train. I also can't account for holidays.",
     'There is no matching Amtrak station. Holiday schedules are not modelled.',
@@ -168,10 +172,14 @@ test('holiday caveats do not rescue refusalExpected: only noRefusal ignores them
   assert.equal(score({ refusalExpected: true }, { answer: "I can't account for holidays." }).pass, true)
 })
 
-test('withoutHolidayCaveats drops whole sentences that mention holidays, nothing else', () => {
+test('withoutHolidayCaveats cuts only the caveat clause, so other refusal wording survives', () => {
   assert.equal(
     withoutHolidayCaveats("Train 66 leaves at 5:44 AM. I can't account for holidays. Confirm on amtrak.com."),
-    'Train 66 leaves at 5:44 AM. Confirm on amtrak.com.',
+    'Train 66 leaves at 5:44 AM. I . Confirm on amtrak.com.',
+  )
+  assert.equal(
+    withoutHolidayCaveats("I can't look that up because holiday schedules are not modelled."),
+    "I can't look that up because .",
   )
   assert.equal(withoutHolidayCaveats('No caveat here.'), 'No caveat here.')
   assert.equal(withoutHolidayCaveats(''), '')

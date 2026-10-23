@@ -134,6 +134,7 @@ export const SYSTEM_PROMPT =
   'Times from find_trains are US Eastern time at every station, as the schedule data gives them, ' +
   'so say "Eastern time" when you quote times, and mention it especially for stations in other time zones. ' +
   'If a train arrives the next day (arriveDayOffset 1), say so. ' +
+  'If the person gave a weekday but no date, state the date you used (for example "Thursday 2026-10-29"). ' +
   'Whenever you give a schedule answer (times, durations, first or last train, a weekday or date), ' +
   'add one short sentence that holiday schedules are not modelled and the person should confirm on amtrak.com. ' +
   'If a station name is ambiguous, say which stations matched and which one you used or ask. ' +
@@ -158,7 +159,7 @@ const FALLBACK_ANSWER =
 // reports the message back to the model so it can correct itself. The model
 // never writes SQL: every query is a fixed one in search.js / schedule.js and
 // the model only supplies values for its parameters.
-async function runTool(name, input, sql) {
+async function runTool(name, input, sql, now) {
   if (name === 'search_trains') {
     const data = await searchTrains(sql, { query: input.query, limit: RESULT_LIMIT })
     const result = {
@@ -180,7 +181,20 @@ async function runTool(name, input, sql) {
     // Row cap: default 12, never more than 20, whatever the model asks for.
     const asked = input.limit == null ? TRAIN_RESULT_LIMIT : Number(input.limit)
     const limit = Number.isFinite(asked) ? Math.min(asked, TRAIN_RESULT_MAX) : asked
-    const result = await findDirectTrains(sql, { ...input, limit })
+    // Whitelist, don't spread: `{ ...input }` would let the model supply
+    // fields we never offered, like `today`, and so choose what "today" is.
+    // `today` always comes from the real (injected) clock.
+    const result = await findDirectTrains(sql, {
+      from: input.from,
+      to: input.to,
+      date: input.date,
+      weekday: input.weekday,
+      departAfter: input.departAfter,
+      departBefore: input.departBefore,
+      route: input.route,
+      limit,
+      today: todayInNewYork(now),
+    })
     return { result, rowCount: result.trains.length }
   }
 
@@ -237,7 +251,7 @@ export async function askQuestion({ anthropic, sql, question, now = new Date() }
       if (toolUse.name === 'search_trains') record.query = input.query
       let result
       try {
-        const run = await runTool(toolUse.name, input, sql)
+        const run = await runTool(toolUse.name, input, sql, now)
         result = run.result
         record.result = result
         // How many rows the model was shown; logged instead of the rows.

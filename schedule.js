@@ -148,7 +148,11 @@ export async function resolveStation(sql, input) {
     select stop_id, stop_name, stop_timezone
     from stops
     where upper(stop_id) = upper(${lookup}) or stop_name ilike ${pattern}
-    order by stop_name, stop_id
+    order by
+      (upper(stop_id) = upper(${lookup})) desc,
+      (lower(stop_name) = lower(${lookup})) desc,
+      stop_name, stop_id
+    limit 25
   `
   const station = (r) => ({ stop_id: r.stop_id, name: r.stop_name, timezone: r.stop_timezone })
   const matched = (r) => ({ input: text, status: 'matched', ...station(r), ...(alias?.note ? { note: alias.note } : {}) })
@@ -413,7 +417,17 @@ export async function findDirectTrains(sql, options) {
   result.trains = all.slice(0, o.max)
   result.unavailable = unavailable.slice(0, 10)
 
-  if (all.length === 0) notes.push(`No direct train runs ${fromStation.name} to ${toStation.name} on ${requestedIso} with these filters.`)
+  // On the feed's very first day, a train that started the evening before
+  // (before the data begins) is missing, so an empty or short list may be wrong.
+  const firstDay = calendarWindow && requestedIso === calendarWindow.start
+  if (firstDay) {
+    notes.push(
+      `${requestedIso} is the first day in the schedule data, so trains that started the previous day ` +
+        '(and pass after midnight) are not in the data and may be missing.',
+    )
+  } else if (all.length === 0) {
+    notes.push(`No direct train runs ${fromStation.name} to ${toStation.name} on ${requestedIso} with these filters.`)
+  }
   if (all.length > o.max) {
     notes.push(`Showing the first ${o.max} of ${all.length} trains by departure time; the summary covers all ${all.length}. Use departAfter to see later ones.`)
   }

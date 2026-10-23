@@ -347,6 +347,18 @@ test('station matching: ids, aliases, exact names beat substrings', async () => 
   assert.equal((await resolveStation(sql, 'BBY')).stop_id, 'BBY')
 })
 
+test('station lookup is capped by a SQL limit and puts exact matches first', async () => {
+  const sql = fakeSql({ stops: STOPS })
+  await resolveStation(sql, 'a')
+  assert.match(sql.calls[0].text, /limit 25/)
+  assert.match(sql.calls[0].text, /order by\s+\(upper\(stop_id\) = upper\(\?\)\) desc/)
+  // 40 stations containing "x": the fake applies the same limit.
+  const many = Array.from({ length: 40 }, (_, i) => ({ stop_id: `X${String(i).padStart(2, '0')}`, stop_name: `Xville ${i}`, stop_timezone: 'America/New_York' }))
+  const r = await resolveStation(fakeSql({ stops: many }), 'x')
+  assert.equal(r.status, 'ambiguous')
+  assert.equal(r.candidates.length, 10)
+})
+
 test('odd station text is handled: empty, inherited property names', async () => {
   const sql = fakeSql({ stops: STOPS })
   assert.equal((await resolveStation(sql, '   ')).status, 'not_found')
@@ -407,4 +419,93 @@ test('todayInNewYork uses New York time, not UTC', () => {
   // 02:00 UTC on the 24th is still the evening of the 23rd in New York.
   assert.equal(todayInNewYork(new Date('2026-10-24T02:00:00Z')), '2026-10-23')
   assert.equal(todayInNewYork(new Date('2026-10-24T05:00:00Z')), '2026-10-24')
+})
+
+// ---------------------------------------------------------------------------
+// Boundary tests: exactly 24:00:00, and inclusive calendar dates. The feed has
+// 12 legs departing and 13 arriving at exactly 24:00:00.
+// ---------------------------------------------------------------------------
+
+const runLegs = async (legs, opts) => {
+  const sql = fakeSql({ stops: STOPS, legs: { 'NYP>BOS': legs } })
+  return findDirectTrains(sql, { from: 'NYP', to: 'BOS', today: '2026-10-23', ...opts })
+}
+
+test('a leg departing at exactly 24:00:00 is 12:00 AM on the NEXT day (service day + 1)', async () => {
+  // Wednesday service, boards at 24:00:00 = midnight starting Thursday.
+  const legs = [leg('88', 'Test', hms(24, 0), hms(27, 30), only('wednesday'))]
+  const thu = await runLegs(legs, { date: THURSDAY })
+  assert.equal(thu.trains.length, 1)
+  assert.equal(thu.trains[0].depart, '12:00 AM')
+  assert.equal(thu.trains[0].serviceDate, '2026-10-28') // the Wednesday
+  assert.equal(thu.trains[0].arrive, '3:30 AM')
+  assert.equal(thu.trains[0].arriveDayOffset, 0)
+  assert.equal(thu.trains[0].durationMinutes, 210)
+  // NOT on Wednesday itself: 24:00:00 is already Thursday.
+  const wed = await runLegs(legs, { date: '2026-10-28' })
+  assert.deepEqual(wed.trains, [])
+})
+
+test('exactly 24:00:00 vs one second earlier: 23:59:59 stays on the service day', async () => {
+  const legs = [leg('89', 'Test', hms(23, 59) + 59, hms(26, 0), only('wednesday'))]
+  const wed = await runLegs(legs, { date: '2026-10-28' })
+  assert.equal(wed.trains.length, 1)
+  assert.equal(wed.trains[0].depart, '11:59 PM')
+  const thu = await runLegs(legs, { date: THURSDAY })
+  assert.deepEqual(thu.trains, [])
+})
+
+test('a leg arriving at exactly 24:00:00 arrives 12:00 AM with arriveDayOffset 1', async () => {
+  const legs = [leg('90', 'Test', hms(22, 0), hms(24, 0), only('thursday'))]
+  const r = await runLegs(legs, { date: THURSDAY })
+  const t = r.trains[0]
+  assert.equal(t.depart, '10:00 PM')
+  assert.equal(t.arrive, '12:00 AM')
+  assert.equal(t.arriveDayOffset, 1)
+  assert.equal(t.overnight, true)
+  assert.equal(t.durationMinutes, 120)
+  // One minute earlier is still the same day.
+  const same = await runLegs([leg('91', 'Test', hms(22, 0), hms(23, 59), only('thursday'))], { date: THURSDAY })
+  assert.equal(same.trains[0].arriveDayOffset, 0)
+  assert.equal(same.trains[0].overnight, false)
+})
+
+test('arrival offset is measured from the PHYSICAL departure day (47:00 -> 48:00 is +1)', async () => {
+  // Boards 47:00 (service day + 1), arrives 48:00 = exactly one more day boundary.
+  const legs = [leg('92', 'Test', hms(47, 0), hms(48, 0), only('wednesday'))]
+  const r = await runLegs(legs, { date: THURSDAY })
+  const t = r.trains[0]
+  assert.equal(t.depart, '11:00 PM')
+  assert.equal(t.arrive, '12:00 AM')
+  assert.equal(t.arriveDayOffset, 1)
+  // Boards at 48:00:00 exactly: service day + 2, midnight.
+  const two = await runLegs([leg('93', 'Test', hms(48, 0), hms(50, 0), only('tuesday'))], { date: THURSDAY })
+  assert.equal(two.trains[0].depart, '12:00 AM')
+  assert.equal(two.trains[0].serviceDate, '2026-10-27')
+})
+
+test('calendar start_date and end_date are inclusive', async () => {
+  const endsToday = [leg('94', 'Test', hms(9, 0), hms(13, 0), only('thursday'), { start_date: 20260906, end_date: 20261029 })]
+  assert.equal((await runLegs(endsToday, { date: THURSDAY })).trains.length, 1) // end_date == requested date
+  const endedYesterday = [leg('94', 'Test', hms(9, 0), hms(13, 0), only('thursday'), { end_date: 20261028 })]
+  assert.equal((await runLegs(endedYesterday, { date: THURSDAY })).trains.length, 0)
+  const startsToday = [leg('95', 'Test', hms(9, 0), hms(13, 0), only('thursday'), { start_date: 20261029 })]
+  assert.equal((await runLegs(startsToday, { date: THURSDAY })).trains.length, 1)
+  const startsTomorrow = [leg('95', 'Test', hms(9, 0), hms(13, 0), only('thursday'), { start_date: 20261030 })]
+  assert.equal((await runLegs(startsTomorrow, { date: THURSDAY })).trains.length, 0)
+  // The inclusive end applies to the SERVICE date for after-midnight trains too:
+  // 66-style leg, service Wednesday 10-28 = end_date.
+  const overnightEnd = [leg('96', 'Test', hms(29, 0), hms(31, 0), only('wednesday'), { end_date: 20261028 })]
+  assert.equal((await runLegs(overnightEnd, { date: THURSDAY })).trains.length, 1)
+})
+
+test('first day of the feed: the note says prior-day trains are not in the data', async () => {
+  const sql = fakeSql({ stops: STOPS, legs: { 'NYP>BOS': [] } })
+  const r = await findDirectTrains(sql, { from: 'NYP', to: 'BOS', date: '2026-09-06', today: '2026-09-01' })
+  assert.deepEqual(r.trains, [])
+  assert.ok(r.notes.some((n) => /first day in the schedule data/.test(n) && /previous day/.test(n)))
+  assert.ok(!r.notes.some((n) => /No direct train runs/.test(n)))
+  // Any other day keeps the plain message.
+  const other = await findDirectTrains(sql, { from: 'NYP', to: 'BOS', date: '2026-09-07', today: '2026-09-01' })
+  assert.ok(other.notes.some((n) => /No direct train runs/.test(n)))
 })

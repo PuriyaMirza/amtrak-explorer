@@ -69,7 +69,15 @@ export function fakeSql({
       const needle = pattern.replaceAll('%', '').toLowerCase()
       return stops
         .filter((r) => r.stop_id.toUpperCase() === lookup.toUpperCase() || r.stop_name.toLowerCase().includes(needle))
-        .sort((a, b) => a.stop_name.localeCompare(b.stop_name) || a.stop_id.localeCompare(b.stop_id)) // order by stop_name, stop_id
+        // the real query's order by: exact id, exact name, then stop_name, stop_id; and its limit 25
+        .sort(
+          (a, b) =>
+            (b.stop_id.toUpperCase() === lookup.toUpperCase()) - (a.stop_id.toUpperCase() === lookup.toUpperCase()) ||
+            (b.stop_name.toLowerCase() === lookup.toLowerCase()) - (a.stop_name.toLowerCase() === lookup.toLowerCase()) ||
+            a.stop_name.localeCompare(b.stop_name) ||
+            a.stop_id.localeCompare(b.stop_id),
+        )
+        .slice(0, 25)
     }
     if (text.includes('from calendar')) return [window]
     // schedule.js: the legs query. values = [fromId, toId].
