@@ -36,7 +36,7 @@ export function textResponse(text, usage = { input_tokens: 150, output_tokens: 3
 // A fake Neon `sql` tagged-template function. searchTrains() runs two
 // queries (stations, routes); we tell them apart by their SQL text. Records
 // every call as { text, values }.
-export function fakeSql({ stations = [], routes = [], fail = null } = {}) {
+export function fakeSql({ stations = [], routes = [], fail = null, insertFail = null } = {}) {
   const calls = []
   const sql = async (strings, ...values) => {
     const text = strings.join('?')
@@ -47,6 +47,14 @@ export function fakeSql({ stations = [], routes = [], fail = null } = {}) {
     throw new Error('fakeSql: unexpected query')
   }
   sql.calls = calls
+  // Neon clients also have `.query(text, params)`, used by insertEvent.
+  // Inserts are recorded in `sql.inserts` (and fail if `insertFail` is set).
+  sql.inserts = []
+  sql.query = async (text, params) => {
+    if (insertFail) throw new Error(insertFail)
+    sql.inserts.push({ text, params })
+    return []
+  }
   return sql
 }
 

@@ -1,5 +1,8 @@
 import { neon } from '@neondatabase/serverless'
+import { insertEvent } from '../event-store.js'
 
+// Event types a BROWSER may submit. 'ask' is deliberately absent: ask rows are
+// written server-side only (api/ask.js), so a browser can't forge them.
 const VALID_TYPES = ['search', 'click']
 
 export default async function handler(req, res) {
@@ -19,31 +22,9 @@ export default async function handler(req, res) {
   try {
     const sql = neon(process.env.DATABASE_URL)
 
-    // Columns are listed explicitly rather than spread from the body, so a
-    // caller can't write to a column we didn't intend to expose.
-    await sql.query(
-      `insert into events (
-         event_type, device_id, session_id, query_id,
-         query_text, stop_count, route_count,
-         target_type, target_id, target_label,
-         result_position, result_group, metadata
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [
-        body.event_type,
-        body.device_id,
-        body.session_id,
-        body.query_id ?? null,
-        body.query_text ?? null,
-        body.stop_count ?? null,
-        body.route_count ?? null,
-        body.target_type ?? null,
-        body.target_id ?? null,
-        body.target_label ?? null,
-        body.result_position ?? null,
-        body.result_group ?? null,
-        body.metadata ?? {},
-      ]
-    )
+    // insertEvent owns the column whitelist (see event-store.js), so passing
+    // the whole body is safe: keys it doesn't list are ignored.
+    await insertEvent(sql, body)
 
     return res.status(204).end()
   } catch (err) {

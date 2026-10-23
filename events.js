@@ -13,8 +13,8 @@ function getOrCreate(storage, key) {
 // device_id lives in localStorage, so it survives closing the tab — it
 // identifies this browser. session_id lives in sessionStorage, which clears
 // when the tab closes — it identifies one visit.
-const deviceId = getOrCreate(localStorage, 'amtrak_device_id')
-const sessionId = getOrCreate(sessionStorage, 'amtrak_session_id')
+export const deviceId = getOrCreate(localStorage, 'amtrak_device_id')
+export const sessionId = getOrCreate(sessionStorage, 'amtrak_session_id')
 
 export async function logEvent(eventType, fields = {}) {
   try {
