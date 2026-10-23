@@ -9,6 +9,7 @@
 // importing them (dependency injection). That is what lets a test hand it a
 // fake Anthropic client and a fake `sql` function.
 import { searchTrains } from './search.js'
+import { findDirectTrains, todayInNewYork, WEEKDAYS } from './schedule.js'
 
 // Pinned on purpose: the app and the evals must use the same model, otherwise
 // an eval pass rate says nothing about what users actually get.
@@ -17,9 +18,16 @@ export const MODEL = 'claude-sonnet-5-5'
 // Bump this whenever SYSTEM_PROMPT or the tools change in a way that could
 // move the eval pass rate. It is written into eval/RESULTS.md next to every
 // run, so a change in pass rate can be tied to a change in the prompt.
-export const PROMPT_VERSION = 'v1'
+export const PROMPT_VERSION = 'v2'
 
 export const RESULT_LIMIT = 10
+// Most trains one find_trains result may carry back to the model. A busy pair
+// like New York - Boston has 30+ trains a day; every row is tokens we pay for
+// twice (this round and every later round). The result's `summary` still
+// covers ALL trains (earliest, latest, fastest), so "last train" and
+// "fastest" stay correct when the list is cut short.
+export const TRAIN_RESULT_LIMIT = 12
+export const TRAIN_RESULT_MAX = 20
 export const MAX_ROUNDS = 4
 
 export const SEARCH_TOOL = {
@@ -47,17 +55,151 @@ export const SEARCH_TOOL = {
   },
 }
 
+export const FIND_TRAINS_TOOL = {
+  name: 'find_trains',
+  description:
+    'Look up DIRECT Amtrak trains (one train, no connections) between two stations, ' +
+    'with real departure and arrival times, durations, and train numbers, for one ' +
+    'specific day. Use it for any question about times, schedules, how long a trip ' +
+    'takes, the first/last/fastest train, what runs on a given weekday or date, or ' +
+    'whether a particular train can be used between two stations. Give a date ' +
+    '(YYYY-MM-DD) when the person names or implies one; otherwise give a weekday ' +
+    '(meaning the next such day) or neither (meaning today). Days are physical days: ' +
+    'a train that leaves in the early hours of Thursday counts as a Thursday train. ' +
+    'The result has "trains" (sorted by departure, possibly cut short), a "summary" ' +
+    'covering ALL trains (earliest, latest, fastest, count), "unavailable" (trains ' +
+    'that stop at both places but cannot be boarded/exited there), and "notes" that ' +
+    'you must respect. Stations may be ids (NYP, BOS, PHL, WAS, CHI, LAX) or names; ' +
+    'if a name is ambiguous the result lists candidates, so retry with a stop_id. ' +
+    'arriveDayOffset 1 means the train arrives the next day.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      from: {
+        type: 'string',
+        description: 'Departure station: a stop_id like "NYP" or a name like "New York", "Philadelphia".',
+      },
+      to: {
+        type: 'string',
+        description: 'Arrival station: a stop_id like "BOS" or a name.',
+      },
+      date: {
+        type: 'string',
+        description:
+          'The day the traveler departs, YYYY-MM-DD. Work out relative dates ' +
+          '("next Thursday", "this Saturday") from today\'s date in the system prompt.',
+      },
+      weekday: {
+        type: 'string',
+        enum: WEEKDAYS,
+        description: 'Use only when the person gives a weekday but no date: means the next such day.',
+      },
+      departAfter: {
+        type: 'string',
+        description: 'Only trains leaving at or after this 24-hour time, e.g. "18:00".',
+      },
+      departBefore: {
+        type: 'string',
+        description: 'Only trains leaving at or before this 24-hour time, e.g. "09:30".',
+      },
+      route: {
+        type: 'string',
+        description: 'Only trains whose route name contains this text, e.g. "Acela", "Cardinal", "Lake Shore".',
+      },
+      limit: {
+        type: 'integer',
+        description: `How many trains to list (default ${TRAIN_RESULT_LIMIT}, max ${TRAIN_RESULT_MAX}).`,
+      },
+    },
+    required: ['from', 'to'],
+  },
+}
+
+export const TOOLS = [SEARCH_TOOL, FIND_TRAINS_TOOL]
+
+// The instructions that never change. The date is added per request, see
+// systemPromptFor() below. (Two phrases here, "You help people explore Amtrak"
+// and "Never invent a station", are also what the prompt-injection eval case
+// looks for in an answer; if you reword them, update eval/cases.js.)
 export const SYSTEM_PROMPT =
-  'You help people explore Amtrak stations and routes. ' +
-  'You can ONLY describe stations and routes returned by the search_trains tool. ' +
+  'You help people explore Amtrak stations, routes and schedules. ' +
+  'You have two tools: search_trains (stations and routes by name) and ' +
+  'find_trains (direct trains between two stations, with times and durations). ' +
+  'You can ONLY state stations, routes, train numbers, times and durations that a tool returned. ' +
   'Never invent a station, route, schedule, duration, or price. ' +
-  'If the tool returns nothing relevant, say so plainly. ' +
-  'You cannot filter by trip duration, departure time, or scenery — ' +
-  'say so if asked, rather than guessing. Keep answers to a few sentences. '
-  + 'Reply in plain text only — no markdown, no asterisks, no bullet points.'
+  'If a tool returns nothing relevant, say so plainly. ' +
+  'You have no fares, live delay information, seat availability or scenery data, and you cannot book ' +
+  'tickets; say so if asked, rather than guessing. ' +
+  'find_trains covers direct trains only, not connections. ' +
+  'Times from find_trains are US Eastern time at every station, as the schedule data gives them, ' +
+  'so say "Eastern time" when you quote times, and mention it especially for stations in other time zones. ' +
+  'If a train arrives the next day (arriveDayOffset 1), say so. ' +
+  'If the person gave a weekday but no date, state the date you used (for example "Thursday 2026-10-29"). ' +
+  'Whenever you give a schedule answer (times, durations, first or last train, a weekday or date), ' +
+  'add one short sentence that holiday schedules are not modelled and the person should confirm on amtrak.com. ' +
+  'If a station name is ambiguous, say which stations matched and which one you used or ask. ' +
+  'Keep answers to a few sentences. ' +
+  'Reply in plain text only — no markdown, no asterisks, no bullet points.'
+
+// SYSTEM_PROMPT plus today's date. The model has no clock, and "next
+// Thursday" or "this Saturday" can't be turned into a date without one. It is
+// computed per request (not at import time, which on a warm serverless
+// instance could be days old) and in New York time, matching the schedule data.
+export function systemPromptFor(now = new Date()) {
+  const iso = todayInNewYork(now)
+  const weekday = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()]
+  return `${SYSTEM_PROMPT} Today is ${weekday} ${iso} (US Eastern time).`
+}
 
 const FALLBACK_ANSWER =
   "I wasn't able to put together an answer — try rephrasing the question."
+
+// Runs one tool call for real and returns what to show the model, plus how
+// many rows that was. Throws on bad input or a database error; the caller
+// reports the message back to the model so it can correct itself. The model
+// never writes SQL: every query is a fixed one in search.js / schedule.js and
+// the model only supplies values for its parameters.
+async function runTool(name, input, sql, now) {
+  if (name === 'search_trains') {
+    const data = await searchTrains(sql, { query: input.query, limit: RESULT_LIMIT })
+    const result = {
+      stations: data.stations.map((s) => ({
+        id: s.stop_id,
+        name: s.stop_name,
+        timezone: s.stop_timezone,
+        routes: s.routes,
+      })),
+      routes: data.routes.map((r) => ({
+        name: r.route_long_name,
+        stops: r.stops,
+      })),
+    }
+    return { result, rowCount: result.stations.length + result.routes.length }
+  }
+
+  if (name === 'find_trains') {
+    // Row cap: default 12, never more than 20, whatever the model asks for.
+    const asked = input.limit == null ? TRAIN_RESULT_LIMIT : Number(input.limit)
+    const limit = Number.isFinite(asked) ? Math.min(asked, TRAIN_RESULT_MAX) : asked
+    // Whitelist, don't spread: `{ ...input }` would let the model supply
+    // fields we never offered, like `today`, and so choose what "today" is.
+    // `today` always comes from the real (injected) clock.
+    const result = await findDirectTrains(sql, {
+      from: input.from,
+      to: input.to,
+      date: input.date,
+      weekday: input.weekday,
+      departAfter: input.departAfter,
+      departBefore: input.departBefore,
+      route: input.route,
+      limit,
+      today: todayInNewYork(now),
+    })
+    return { result, rowCount: result.trains.length }
+  }
+
+  throw new Error(`unknown tool: ${name}`)
+}
 
 // Runs one question through the model, running real queries for any tool
 // calls, and returns everything a caller (endpoint, eval, logger) could want.
@@ -66,7 +208,8 @@ const FALLBACK_ANSWER =
 //              `messages.create` shape)
 //   sql        a Neon `sql` tagged-template function (or a fake)
 //   question   the user's question, already validated by the caller
-export async function askQuestion({ anthropic, sql, question }) {
+//   now        the current time; only tests pass this (it fixes "today")
+export async function askQuestion({ anthropic, sql, question, now = new Date() }) {
   const messages = [{ role: 'user', content: question }]
   const toolCalls = []
   const usage = { input_tokens: 0, output_tokens: 0 }
@@ -81,8 +224,8 @@ export async function askQuestion({ anthropic, sql, question }) {
     response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      tools: [SEARCH_TOOL],
+      system: systemPromptFor(now),
+      tools: TOOLS,
       messages,
     })
     rounds++
@@ -100,31 +243,24 @@ export async function askQuestion({ anthropic, sql, question }) {
 
     const toolResults = []
     for (const toolUse of toolUses) {
+      // `input` is exactly what the model asked for (the ask logger stores
+      // it); `query` is kept for search_trains only because the eval check
+      // toolQueriesInclude reads it.
+      const input = toolUse.input ?? {}
+      const record = { name: toolUse.name, input }
+      if (toolUse.name === 'search_trains') record.query = input.query
       let result
       try {
-        const data = await searchTrains(sql, {
-          query: toolUse.input.query,
-          limit: RESULT_LIMIT,
-        })
-        result = {
-          stations: data.stations.map((s) => ({
-            id: s.stop_id,
-            name: s.stop_name,
-            timezone: s.stop_timezone,
-            routes: s.routes,
-          })),
-          routes: data.routes.map((r) => ({
-            name: r.route_long_name,
-            stops: r.stops,
-          })),
-        }
-        // `name` is which tool ran. Only one tool exists today, but the eval
-        // check `toolCalled` needs it once there are several.
-        toolCalls.push({ name: toolUse.name, query: toolUse.input.query, result })
+        const run = await runTool(toolUse.name, input, sql, now)
+        result = run.result
+        record.result = result
+        // How many rows the model was shown; logged instead of the rows.
+        record.rowCount = run.rowCount
       } catch (err) {
         result = { error: err.message }
-        toolCalls.push({ name: toolUse.name, query: toolUse.input.query, error: err.message })
+        record.error = err.message
       }
+      toolCalls.push(record)
 
       toolResults.push({
         type: 'tool_result',

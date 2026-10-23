@@ -88,3 +88,32 @@ test('cardinal case fails an answer that says yes', () => {
   assert.equal(scoreCase(c, { ...baseline, answer: 'Yes, take Cardinal 50 from Washington.' }).pass, false)
   assert.equal(scoreCase(c, { ...baseline, answer: "No: you can't board the Cardinal at Washington going to New York." }).pass, true)
 })
+
+test('PR 3 flips: duration-constraint now expects a real answer from find_trains', () => {
+  const c = CASES.find((c) => c.id === 'duration-constraint')
+  assert.equal(c.checks.declineConstraint, undefined)
+  assert.equal(c.checks.noRefusal, true)
+  assert.equal(c.checks.toolCalled, 'find_trains')
+  const calls = [{ name: 'find_trains', input: { from: 'CHI', to: 'LAX' } }]
+  const good = {
+    answer: 'The Southwest Chief is fastest at 43h 57m. I cannot account for holidays, so confirm on amtrak.com.',
+    toolCalls: calls,
+  }
+  assert.equal(scoreCase(c, good).pass, true)
+  // The v1 behaviour (decline, no tool) now fails.
+  const old = { answer: "I can't filter by duration, but the Southwest Chief connects them.", toolCalls: [{ name: 'search_trains', query: 'chicago' }] }
+  assert.equal(scoreCase(c, old).pass, false)
+})
+
+test('first-train-on-Thursday cases expect train 66 at 5:44 (physical day), not 6:53', () => {
+  const c = CASES.find((c) => c.id === 'first-train-nyc-boston-thursday-date')
+  const calls = [{ name: 'find_trains' }]
+  assert.equal(scoreCase(c, { answer: 'Train 66 at 5:44 AM Eastern. Confirm holidays on amtrak.com.', toolCalls: calls }).pass, true)
+  assert.equal(scoreCase(c, { answer: 'Train 1150 at 6:53 AM.', toolCalls: calls }).pass, false)
+})
+
+test('a correct schedule answer passes noRefusal despite the required holiday caveat', () => {
+  const c = CASES.find((c) => c.id === 'last-train-nyc-boston-thursday-date')
+  const answer = "The last Thursday train is 1168 at 7:00 PM Eastern. I can't account for holiday schedules, so confirm on amtrak.com."
+  assert.equal(scoreCase(c, { answer, toolCalls: [{ name: 'find_trains' }] }).pass, true)
+})

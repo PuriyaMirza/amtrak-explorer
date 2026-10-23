@@ -24,16 +24,19 @@ export const LOG_TIMEOUT_MS = 2000
 //   error   the message of the error it threw; undefined on success
 //
 // Tool calls are stored as { name, input, row_count } or { name, input, error }.
-// We keep only the count of rows, never the rows themselves: they're large and
-// the answer already summarises them.
+// `input` is the full argument object the model sent (search_trains: { query };
+// find_trains: { from, to, date, ... }). We keep only the count of rows, never
+// the rows themselves: they're large and the answer already summarises them.
+// askQuestion records `input` and `rowCount` per call, so this stays generic:
+// adding a tool doesn't mean touching the logger.
 export function buildAskMetadata({ result, error, latencyMs }) {
   const metadata = { latency_ms: latencyMs }
   if (result) {
     metadata.answer = result.answer
     metadata.tool_calls = result.toolCalls.map((c) => {
-      const call = { name: c.name, input: { query: c.query } }
+      const call = { name: c.name, input: c.input ?? { query: c.query } }
       if (c.error) call.error = c.error
-      else call.row_count = (c.result?.stations?.length ?? 0) + (c.result?.routes?.length ?? 0)
+      else call.row_count = c.rowCount ?? 0
       return call
     })
     metadata.rounds = result.rounds

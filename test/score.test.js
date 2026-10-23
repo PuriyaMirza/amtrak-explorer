@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { scoreCase, REFUSAL_PATTERN } from '../eval/score.js'
+import { scoreCase, REFUSAL_PATTERN, withoutHolidayCaveats } from '../eval/score.js'
 
 // Small helper: score a made-up case with the given checks and response.
 const score = (checks, response) => scoreCase({ id: 'x', category: 'easy', checks }, response)
@@ -135,4 +135,52 @@ test('RegExp entries in a group are tested as regexes (word boundaries work)', (
   assert.equal(score(checks, { answer: 'It takes 13h.' }).pass, false) // "3h" inside "13h"
   assert.equal(score(checks, { answer: 'It takes 13 hours.' }).pass, false)
   assert.equal(score(checks, { answer: 'It takes 3hrs' }).pass, true)
+})
+
+test('noRefusal: a correct answer with a holiday caveat is NOT a refusal', () => {
+  const checks = { noRefusal: true }
+  const caveat = "I can't account for holidays, so please confirm on amtrak.com."
+  for (const answer of [
+    `The first train is 66 at 5:44 AM Eastern. ${caveat}`,
+    `Train 66 leaves at 5:44 AM. Holiday schedules aren't modelled, so check amtrak.com.`,
+    'Train 66 leaves at 5:44 AM Eastern. I cannot account for holiday schedules, so please confirm on amtrak.com.',
+    `The first train is 66 at 5:44 AM.\n${caveat}`,
+  ]) {
+    assert.equal(score(checks, { answer }).pass, true, answer)
+  }
+})
+
+test('noRefusal: real refusals still fail, even when they mention holidays', () => {
+  const checks = { noRefusal: true }
+  for (const answer of [
+    // The two QA examples: the refusal is IN the same sentence as the holiday words.
+    "I can't look that up because holiday schedules are not modelled.",
+    "I can't give you times, since holiday schedules aren't modelled.",
+    "I can't look up train schedules.",
+    "I can't find a direct train. I also can't account for holidays.",
+    'There is no matching Amtrak station. Holiday schedules are not modelled.',
+    "I cannot give times. Please check amtrak.com.",
+  ]) {
+    const r = score(checks, { answer })
+    assert.equal(r.pass, false, answer)
+    assert.deepEqual(failedTypes(r), ['wrong-refusal'])
+  }
+})
+
+test('holiday caveats do not rescue refusalExpected: only noRefusal ignores them', () => {
+  // A case that EXPECTS a refusal reads the whole answer as before.
+  assert.equal(score({ refusalExpected: true }, { answer: "I can't account for holidays." }).pass, true)
+})
+
+test('withoutHolidayCaveats cuts only the caveat clause, so other refusal wording survives', () => {
+  assert.equal(
+    withoutHolidayCaveats("Train 66 leaves at 5:44 AM. I can't account for holidays. Confirm on amtrak.com."),
+    'Train 66 leaves at 5:44 AM. I . Confirm on amtrak.com.',
+  )
+  assert.equal(
+    withoutHolidayCaveats("I can't look that up because holiday schedules are not modelled."),
+    "I can't look that up because .",
+  )
+  assert.equal(withoutHolidayCaveats('No caveat here.'), 'No caveat here.')
+  assert.equal(withoutHolidayCaveats(''), '')
 })

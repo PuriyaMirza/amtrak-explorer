@@ -67,6 +67,10 @@ test those on the deployed site, or use `vercel dev`.
 ```
 index.html          search UI + natural-language ask UI; no DB client
 search.js           searchTrains(sql, {query, limit}) — SINGLE SOURCE OF TRUTH
+schedule.js         findDirectTrains(sql, {from, to, date|weekday, departAfter,
+                    departBefore, route, limit}) — direct trains, times, durations.
+                    Plain data, no prompt text, so a browse endpoint can reuse it.
+                    Also resolveStation() (ids, aliases, ambiguity), todayInNewYork()
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
                     also exports deviceId/sessionId (index.html sends them to /api/ask)
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
@@ -74,7 +78,9 @@ ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never thro
                     2s timeout); buildAskMetadata() shapes the metadata
 styles.css
 ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool loop,
-                    plus MODEL, PROMPT_VERSION and the prompt/tool constants
+                    plus MODEL, PROMPT_VERSION and the prompt/tool constants.
+                    Tools: search_trains (names) and find_trains (schedule.js);
+                    systemPromptFor() adds today's date per request
 api/search.js       GET  /api/search?q=   → searchTrains
 api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
 api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
@@ -106,12 +112,13 @@ never in CI.
 Exit codes: `npm run eval` exits 0 even when some cases fail (it passes
 `--allow-failures` so npm doesn't print an error block on top of the results;
 failures are still listed and recorded). `node eval/run.js` directly exits 1 if
-any case failed, which is expected at baseline (the schedule cases). Either way,
+any case failed (expected at the v1 baseline, where the schedule cases failed). Either way,
 2 = setup problem (missing/empty env vars) and 3 = every request errored (bad
 key, spend limit, SSO), in which case nothing is written to RESULTS.md.
 `vercel env pull` writes empty values for Sensitive variables; if the runner
-says a variable is EMPTY, paste the real value into `.env.local`. The `schedule` cases are expected to fail until the schedule
-tools exist; that failure is the recorded baseline.
+says a variable is EMPTY, paste the real value into `.env.local`. The `schedule` cases failed at the v1 baseline (recorded in
+RESULTS.md); `find_trains` (prompt v2) is what should make them pass. The two
+`weekend-*` cases still need the `plan_weekend` tool (PR 4) and keep failing until then.
 
 ### The architecture rule
 
@@ -219,28 +226,57 @@ POST `{ question }` → `{ answer, toolCalls }`
 
 1. Browser POSTs the question to our function (never to Anthropic directly —
    the API key would be visible in page source)
-2. Function asks Claude, offering one tool: `search_trains`
-3. If Claude requests the tool, **our code** runs the real query
+2. Function asks Claude, offering two tools: `search_trains` (stations/routes by
+   name) and `find_trains` (direct trains between two stations: times,
+   durations, weekdays, dates)
+3. If Claude requests a tool, **our code** runs the real, fixed query (the model
+   only fills in parameters; it never writes SQL)
 4. Real rows go back to Claude, which writes the final answer
 
-Two round trips to Claude, not one.
+Usually two round trips to Claude; up to `MAX_ROUNDS` (4) if it chains tools.
+
+The system prompt (v2) says: state times/durations only if a tool returned them,
+say times are Eastern, and add a "holidays aren't modelled, confirm on amtrak.com"
+caveat to schedule answers. Today's date (New York) is appended per request so
+"next Thursday" can be turned into a date. `find_trains` results are capped at
+12 trains by default (20 max); its `summary` still covers all trains.
 
 **Env var:** `ANTHROPIC_API_KEY` in Vercel, server-side only.
 
-### ⚠️ The main open problem
+### Schedule data: service day vs physical day (read before touching schedule.js)
 
-`search_trains` is a **name substring match only**. It returns station names
-and route names, nothing else.
+GTFS assigns a trip to the **service day it starts on**, and later stops can have
+times past `24:00:00`. Train 66 is a *Wednesday*-service trip that passes NYP at
+`29:44:00`, i.e. **5:44 AM Thursday**. A traveler asking about Thursday means the
+physical day, so `findDirectTrains` uses: service date = requested date −
+`floor(board_seconds / 86400)`, and checks the calendar for *that* date. Time
+shown = board time minus those whole days; `arriveDayOffset` counts days after
+the physical departure. Boarding times go up to 80h in this feed, so the rule is
+general, not just "+1 day". The eval's old "first train on Thursday is 1150 at
+6:53" was the service-day reading and is wrong for travelers.
 
-This means almost every real question gets a polite refusal. "What trains go
-through Chicago?" → finds the station, then correctly reports it has no route
-data for it. "Tell me about the Acela" → finds the name, nothing more.
+Other data facts that bite:
+- **All feed times are US Eastern at every stop**, even Chicago/LA (Lake Shore
+  Limited 48 leaves CHI "22:30:00" = 9:30pm Central; California Zephyr 5 leaves
+  CHI "15:00:00" = 2pm Central). GTFS defines times in the *agency's* timezone,
+  not `stops.stop_timezone`. The tool reports times as given and says "Eastern".
+- `calendar` covers 2026-09-06 to 2027-09-06 in overlapping windows; there is **no
+  calendar_dates table**, so holidays are not modelled. A date outside the range
+  returns `outsideFeed` instead of an empty list.
+- `pickup_type`/`drop_off_type` = 1 means not allowed. Such trains come back in
+  `unavailable` (e.g. Cardinal 50 can't be boarded at WAS or PHL).
+- "No date" in a weekday query means the *next* such day, so one real timetable
+  is used rather than mixing windows.
+- Station text: ids, then aliases (`NYC`, `New York` -> NYP; `Boston` -> BOS, which
+  is the exact name of three stations), then exact name, then substring. More than
+  one candidate returns `ambiguous` with candidates; nothing is guessed.
 
-**The model is behaving correctly; the tool is too thin.** The data is right
-there — `stop_times → trips → routes` knows exactly which routes serve CHI.
-The tool just doesn't expose that join.
+### What the ask box can answer now, and what it can't
 
-Fixing this is the highest-value next change.
+Answerable (PR 3): direct-train times, durations, first/last/fastest train,
+weekday- and date-specific schedules, boarding restrictions, "what serves X".
+Still not answerable: connections, fares, live delays, holidays, weekend
+pairing (`plan_weekend`, PR 4), scenery, booking.
 
 ---
 
@@ -300,7 +336,8 @@ blocked on having enough data to say anything honest.
   `stops.stop_lat`/`stop_lon` (unambiguous; station name strings are not).
   Must use **historical averages**, not forecasts — real forecasts reach only
   ~14 days, and the use case is "a nice weekend in early October."
-- **Richer trip search** — duration / overnight / connection filters.
+- **Richer trip search** — connections (direct-only today; duration, overnight and
+  time filters shipped in PR 3).
 - **Migrate `bike-forecast` to Neon too** — still on Supabase. Recipe above.
 
 ---

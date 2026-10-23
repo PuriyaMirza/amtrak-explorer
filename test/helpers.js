@@ -28,15 +28,33 @@ export function toolUseResponse(query, { id = 'tu_1', usage = { input_tokens: 10
   }
 }
 
+// A response where Claude asks for any tool, with any input.
+export function toolUseFor(name, input, { id = 'tu_1', usage = { input_tokens: 100, output_tokens: 20 } } = {}) {
+  return { stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name, input }], usage }
+}
+
 // A final text response.
 export function textResponse(text, usage = { input_tokens: 150, output_tokens: 30 }) {
   return { stop_reason: 'end_turn', content: [{ type: 'text', text }], usage }
 }
 
-// A fake Neon `sql` tagged-template function. searchTrains() runs two
-// queries (stations, routes); we tell them apart by their SQL text. Records
-// every call as { text, values }.
-export function fakeSql({ stations = [], routes = [], fail = null, insertFail = null } = {}) {
+// A fake Neon `sql` tagged-template function. We tell the queries apart by
+// their SQL text, and records every call as { text, values }.
+//
+//   search_trains (search.js): stations / routes
+//   find_trains   (schedule.js): `stops` (every station row; the fake applies
+//     the same id/name matching the real query does), `legs` (an object keyed
+//     "FROM>TO" -> rows shaped like the legs query's output), `window`
+//     (the feed's first/last calendar day)
+export function fakeSql({
+  stations = [],
+  routes = [],
+  stops = [],
+  legs = {},
+  window = { first_day: 20260906, last_day: 20270906 },
+  fail = null,
+  insertFail = null,
+} = {}) {
   const calls = []
   const sql = async (strings, ...values) => {
     const text = strings.join('?')
@@ -44,6 +62,26 @@ export function fakeSql({ stations = [], routes = [], fail = null, insertFail = 
     if (fail) throw new Error(fail)
     if (text.includes('from stops s')) return stations
     if (text.includes('from routes r')) return routes
+    // schedule.js: station lookup. values = [lookup, pattern]; the pattern is
+    // %text% for an ILIKE, so we strip the % and compare case-insensitively.
+    if (text.includes('from stops\n')) {
+      const [lookup, pattern] = values
+      const needle = pattern.replaceAll('%', '').toLowerCase()
+      return stops
+        .filter((r) => r.stop_id.toUpperCase() === lookup.toUpperCase() || r.stop_name.toLowerCase().includes(needle))
+        // the real query's order by: exact id, exact name, then stop_name, stop_id; and its limit 25
+        .sort(
+          (a, b) =>
+            (b.stop_id.toUpperCase() === lookup.toUpperCase()) - (a.stop_id.toUpperCase() === lookup.toUpperCase()) ||
+            (b.stop_name.toLowerCase() === lookup.toLowerCase()) - (a.stop_name.toLowerCase() === lookup.toLowerCase()) ||
+            a.stop_name.localeCompare(b.stop_name) ||
+            a.stop_id.localeCompare(b.stop_id),
+        )
+        .slice(0, 25)
+    }
+    if (text.includes('from calendar')) return [window]
+    // schedule.js: the legs query. values = [fromId, toId].
+    if (text.includes('from stop_times a')) return legs[`${values[0]}>${values[1]}`] ?? []
     throw new Error('fakeSql: unexpected query')
   }
   sql.calls = calls
