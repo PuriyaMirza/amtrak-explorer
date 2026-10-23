@@ -59,7 +59,7 @@ export function createHandler({ makeClients }) {
         // Log the failed ask too, then let the outer catch send the 500.
         await logAsk(sql, {
           question, deviceId, sessionId,
-          error: err.message,
+          error: String(err?.message ?? err),
           latencyMs: Date.now() - startedAt,
         })
         throw err
