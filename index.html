@@ -17,7 +17,7 @@
   <div id="ask-results"></div>
 
   <script type="module">
-    import { logEvent } from './events.js'
+    import { logEvent, deviceId, sessionId } from './events.js'
 
     const input = document.getElementById('q')
     const results = document.getElementById('results')
@@ -140,7 +140,9 @@
         const res = await fetch('/api/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question }),
+          // Same ids events.js sends to /api/log, so the server can tie an ask to
+          // a browser and a visit.
+          body: JSON.stringify({ question, device_id: deviceId, session_id: sessionId }),
         })
         const data = await res.json()
 

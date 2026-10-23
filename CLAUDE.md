@@ -67,14 +67,18 @@ test those on the deployed site, or use `vercel dev`.
 ```
 index.html          search UI + natural-language ask UI; no DB client
 search.js           searchTrains(sql, {query, limit}) — SINGLE SOURCE OF TRUTH
-events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget
+events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
+                    also exports deviceId/sessionId (index.html sends them to /api/ask)
+event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
+ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never throws,
+                    2s timeout); buildAskMetadata() shapes the metadata
 styles.css
 ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool loop,
                     plus MODEL, PROMPT_VERSION and the prompt/tool constants
 api/search.js       GET  /api/search?q=   → searchTrains
-api/log.js          POST /api/log         → inserts one events row
+api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
 api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
-                    builds clients from env) → askQuestion
+                    builds clients from env) → askQuestion → logAsk
 eval/cases.js       40 eval cases (easy / ambiguous / adversarial / schedule)
 eval/score.js       scoreCase() — deterministic checks, no LLM judge
 eval/taxonomy.js    check → named failure type (hallucinated-entity, ...)
@@ -83,7 +87,7 @@ eval/results.js     formats/appends rows of eval/RESULTS.md
 eval/run.js         CLI: `npm run eval`
 eval/RESULTS.md     run log, one row per eval run (header explains columns)
 test/               `npm test` (node:test, no network)
-sql/                schema history (SEE WARNING BELOW)
+sql/                events table, reconstructed from the live DB (2026-10-23)
 ```
 
 ### Running evals
@@ -162,20 +166,29 @@ Deliberate choices:
 - `metadata jsonb` — escape hatch so new event types don't need a migration
 - **No enum check on `event_type` in the table.** Validation lives in
   `api/log.js` instead, as a whitelist. Easy to extend, still a real gate.
-- `api/log.js` lists insertable columns **explicitly** so a caller can't write
-  to unintended columns.
+- `event-store.js` lists insertable columns **explicitly** so a caller can't write
+  to unintended columns. Both `api/log.js` and the ask logger go through it.
+- **`event_type = 'ask'`** — one row per `/api/ask` request (success, or an error
+  after validation), written **server-side only**: `api/log.js` does not accept
+  `'ask'`, so a browser can't forge one. `query_text` = the question;
+  `device_id`/`session_id` come from the browser if sent, else `'unknown'` (both
+  columns are NOT NULL). `metadata` keys: `answer`, `tool_calls`
+  (`[{name, input, row_count | error}]`, no result rows), `rounds`, `latency_ms`,
+  `input_tokens`, `output_tokens`, `model`, `prompt_version`, `error` (failures
+  only; then no answer/tool_calls). Logging happens in `api/ask.js` via
+  `logAsk`, never inside `askQuestion`, so `npm run eval` (local mode) writes no
+  rows. A log failure or a 2s timeout is swallowed and never affects the answer.
 
-### ⚠️ Known cleanup items
+### Known cleanup items
 
-1. **`sql/001_events_table.sql` is stale** — it's the first draft, not the
-   15-column schema actually live, and it still contains Supabase-specific RLS.
-2. **The RLS policies are now inert.** They migrated across from Supabase, but
-   the functions connect as the table owner, which bypasses RLS. They do
-   nothing. Either drop them or leave them as harmless residue — but don't
-   mistake them for active protection.
-3. **`events` has no logging from the ask box.** `/api/ask` doesn't call
-   `logEvent`, so natural-language questions aren't captured. Worth adding
-   before any usage analysis.
+1. ~~`sql/001_events_table.sql` is stale~~ — done: it is now a reconstruction of
+   the live schema (marked with its date).
+2. **The RLS setup is inert.** RLS is enabled on `events` with **zero policies**
+   (the Supabase `anon` policy didn't survive the migration), and the functions
+   connect as the table owner, which bypasses RLS. It protects nothing; see the
+   comment in `sql/001_events_table.sql`. Leave it or drop it, but don't mistake
+   it for active protection.
+3. ~~`/api/ask` doesn't log~~ — done: see `event_type = 'ask'` above.
 
 ### Migrating another project to Neon (recipe that worked)
 
