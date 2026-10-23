@@ -25,3 +25,4 @@ Columns:
 
 | Date (UTC) | Mode | Model | Prompt | Pass | By category | Failure types | Failed cases |
 |---|---|---|---|---|---|---|---|
+| 2026-10-23T22:21Z | local | claude-sonnet-5-5 | v1 | 27/40 (68%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 0/13 | wrong-tool 13, wrong-time 12, wrong-refusal 11 | first-train-nyc-boston-thursday-date, first-train-nyc-boston-any-thursday, first-acela-nyc-boston-thursday-date, last-train-nyc-boston-thursday-date, fastest-train-nyc-boston-thursday-date, acela-duration-nyc-boston, southwest-chief-duration-chi-lax, lake-shore-overnight-chi-nyc, saturday-first-train-nyc-boston-date, date-outside-feed, cardinal-no-boarding-was-nyc, weekend-friday-evening-philadelphia-date, weekend-generic-philadelphia |
