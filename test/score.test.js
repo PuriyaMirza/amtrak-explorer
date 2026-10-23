@@ -127,3 +127,12 @@ test('REFUSAL_PATTERN recognises the phrasings seen from the live model', () => 
   }
   assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN)
 })
+
+test('RegExp entries in a group are tested as regexes (word boundaries work)', () => {
+  const checks = { anyOfTimes: [[/\b[34]\s*(hours?|hrs?|h)(?![a-z])/i]] }
+  assert.equal(score(checks, { answer: 'About 4 hours.' }).pass, true)
+  assert.equal(score(checks, { answer: 'Roughly 3h 47m.' }).pass, true)
+  assert.equal(score(checks, { answer: 'It takes 13h.' }).pass, false) // "3h" inside "13h"
+  assert.equal(score(checks, { answer: 'It takes 13 hours.' }).pass, false)
+  assert.equal(score(checks, { answer: 'It takes 3hrs' }).pass, true)
+})

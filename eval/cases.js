@@ -341,10 +341,21 @@ export const CASES = [
     id: 'ticket-price',
     category: 'adversarial',
     question: 'How much does a ticket from New York to Boston cost?',
-    // The database has no fare data at all (no fares table), and the system
-    // prompt forbids inventing prices. Any dollar sign means it made one up.
+    // The database has no fare data at all: information_schema shows no
+    // table or column named like fare/price/cost (checked 2026-10-23), and
+    // the system prompt forbids inventing prices. Two checks: no price of any
+    // kind (a "$" or the word dollars/USD), AND an explicit statement that it
+    // has no fare/pricing data. The second group is phrased as "no data"
+    // wording rather than reusing REFUSAL_PATTERN, which misses "I don't have".
     checks: {
-      noneOf: ['$'],
+      noneOf: ['$', 'dollars', 'usd'],
+      anyOfGroups: [
+        [
+          "don't have", 'do not have', "doesn't have", 'does not have',
+          "don’t have", 'no fare', 'no pricing', 'no price', 'no information',
+          "can't", 'cannot', 'unable', 'not available', "isn't available",
+        ],
+      ],
     },
   },
   {
@@ -531,7 +542,12 @@ export const CASES = [
     // answer says "about 4 hours" or "3h4x". (Regionals: 253..384 min.)
     checks: {
       noRefusal: true,
-      anyOfTimes: [['3 hour', '3h', '3 hr', '4 hour', '4h', '4 hr', '3.5', '3 and a half']],
+      // Regexes, not substrings: "3 hour" / "3h" would also match inside
+      // "13 hours" / "13h". \b requires the digit to start a number, and
+      // (?![a-z]) stops "3h" matching the start of a longer word.
+      anyOfTimes: [
+        [/\b[34]\s*(hours?|hrs?|h)(?![a-z])/i, '3.5 hour', '3 and a half'],
+      ],
       toolCalled: 'find_trains',
     },
   },
@@ -606,6 +622,9 @@ export const CASES = [
     // NYP -> WAS. A tool that ignores pickup_type would offer Cardinal 50's
     // WAS departure (stored as "43:09:00"/"44:09:00", i.e. 7:09pm/8:09pm).
     checks: {
+      // Must say no ("yes, take Cardinal 50" fails here) and must not quote
+      // the unboardable departure.
+      refusalExpected: true,
       noneOf: ['7:09 pm', '7:09pm', '19:09', '8:09 pm', '8:09pm', '20:09'],
       toolCalled: 'find_trains',
     },
@@ -619,7 +638,9 @@ export const CASES = [
     // at or after 18:00: Northeast Regional 1135 18:05, Keystone 655 18:16,
     // Vermonter 55 19:01, NER 1107 19:10, NER 1165 20:01, NER 1167 21:05,
     // NER 65 23:23. (Anything earlier, e.g. Acela 2155 at 17:00 or NER 1129
-    // at 17:03, is before 6pm.) The return PHL -> NYP on Sun 2026-11-01 has
+    // at 17:03, is before 6pm.) NER 1169 is stored at 24:20 (arr 25:45): that
+    // is 12:20am Saturday, so it is NOT a Friday-evening train and is left out
+    // of the accepted list on purpose. The return PHL -> NYP on Sun 2026-11-01 has
     // dozens of departures (5:15 through 23:08), so only the outbound is pinned.
     // plan_weekend is the PR 4 tool, so this keeps failing until then.
     checks: {

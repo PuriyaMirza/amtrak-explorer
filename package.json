@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test",
-    "eval": "node eval/run.js"
+    "eval": "node eval/run.js --allow-failures"
   },
   "keywords": [],
   "author": "",
@@ -14,5 +14,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@neondatabase/serverless": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=20.12"
   }
 }

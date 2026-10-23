@@ -7,11 +7,18 @@ import { failureTypeOf } from './taxonomy.js'
 export const REFUSAL_PATTERN =
   /\b(can['’]?t|cannot|no\s+amtrak|doesn['’]?t\s+(serve|have|connect)|does\s+not\s+(serve|have|connect)|isn['’]?t\s+(served|possible)|no\s+(direct\s+)?(train|route|rail)|not\s+(possible|available)|no\s+matching)\b/i
 
-// True if at least one string in the group appears in the answer
-// (case-insensitive substring).
-function groupMatches(group, lowerAnswer) {
-  return group.some((s) => lowerAnswer.includes(s.toLowerCase()))
+// True if at least one entry in the group matches the answer. A string entry
+// is a case-insensitive substring. A RegExp entry is tested against the
+// answer as written; use one when a substring would match too much (e.g.
+// "3h" also matches inside "13h", so use /\b3\s*h(?![a-z])/i instead).
+function groupMatches(group, lowerAnswer, answer) {
+  return group.some((s) =>
+    s instanceof RegExp ? s.test(answer) : lowerAnswer.includes(s.toLowerCase()),
+  )
 }
+
+// How a group is shown in a check's name (strings as-is, regexes as /.../).
+const describeGroup = (group) => group.map(String).join(' | ')
 
 export function scoreCase(caseDef, { answer, toolCalls }) {
   const checks = caseDef.checks || {}
@@ -27,7 +34,7 @@ export function scoreCase(caseDef, { answer, toolCalls }) {
 
   if (checks.anyOfGroups) {
     checks.anyOfGroups.forEach((group, i) => {
-      add('anyOfGroups', `anyOf[${i}]: ${group.join(' | ')}`, groupMatches(group, lowerAnswer))
+      add('anyOfGroups', `anyOf[${i}]: ${describeGroup(group)}`, groupMatches(group, lowerAnswer, answer || ''))
     })
   }
 
@@ -35,7 +42,7 @@ export function scoreCase(caseDef, { answer, toolCalls }) {
   // `wrong-time` rather than `missing-entity`.
   if (checks.anyOfTimes) {
     checks.anyOfTimes.forEach((group, i) => {
-      add('anyOfTimes', `anyOfTimes[${i}]: ${group.join(' | ')}`, groupMatches(group, lowerAnswer))
+      add('anyOfTimes', `anyOfTimes[${i}]: ${describeGroup(group)}`, groupMatches(group, lowerAnswer, answer || ''))
     })
   }
 

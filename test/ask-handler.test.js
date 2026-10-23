@@ -1,7 +1,8 @@
 import { test, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import handler from '../api/ask.js'
-import { mockRes } from './helpers.js'
+import handler, { createHandler } from '../api/ask.js'
+import { MODEL, PROMPT_VERSION } from '../ask-core.js'
+import { mockRes, fakeAnthropic, fakeSql, toolUseResponse, textResponse } from './helpers.js'
 
 // The handler builds its clients from env AFTER validating the request. For
 // the "valid" test we blank the env first, so building the clients fails
@@ -55,4 +56,38 @@ test('a question of exactly 500 characters passes validation', async () => {
   // which the handler reports as a 500. (That is the point: no network.)
   assert.notEqual(res.statusCode, 400)
   assert.notEqual(res.statusCode, 405)
+})
+
+test('success: 200 with { answer, toolCalls, model, promptVersion } (fake clients)', async () => {
+  const anthropic = fakeAnthropic([toolUseResponse('boston'), textResponse('The Acela serves Boston.')])
+  const sql = fakeSql({
+    stations: [{ stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York', routes: ['Acela'] }],
+    routes: [],
+  })
+  const ask = createHandler({ makeClients: () => ({ anthropic, sql }) })
+
+  const res = mockRes()
+  await ask({ method: 'POST', body: { question: 'What serves Boston?' } }, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(Object.keys(res.body).sort(), ['answer', 'model', 'promptVersion', 'toolCalls'])
+  assert.equal(res.body.answer, 'The Acela serves Boston.')
+  assert.equal(res.body.model, MODEL)
+  assert.equal(res.body.promptVersion, PROMPT_VERSION)
+  assert.equal(res.body.toolCalls[0].name, 'search_trains')
+  assert.equal(res.body.toolCalls[0].query, 'boston')
+})
+
+test('a failure while asking becomes a 500 with the error message', async () => {
+  const ask = createHandler({ makeClients: () => { throw new Error('no key') } })
+  const res = mockRes()
+  const realError = console.error
+  console.error = () => {} // the handler logs failures; keep test output clean
+  try {
+    await ask({ method: 'POST', body: { question: 'hi' } }, res)
+  } finally {
+    console.error = realError
+  }
+  assert.equal(res.statusCode, 500)
+  assert.deepEqual(res.body, { error: 'no key' })
 })

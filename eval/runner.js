@@ -13,6 +13,25 @@ export function chooseMode(env) {
   return null
 }
 
+// Names of variables that are SET but EMPTY. `vercel env pull` writes an empty
+// value (KEY="") for variables marked Sensitive in Vercel, so a present-but-
+// empty DATABASE_URL means "the pull succeeded but Vercel withheld the value",
+// which needs a different fix than "you never pulled".
+export function emptyEnvVars(env, names) {
+  return names.filter((n) => n in env && String(env[n]).trim() === '')
+}
+
+// True when the run produced no real answers at all: every single case
+// failed with a request error (bad API key, spend limit hit, SSO login page,
+// endpoint down). Such a run says nothing about answer quality, so it must
+// not be recorded as a data point in RESULTS.md.
+export function allRequestErrors(outcomes) {
+  return (
+    outcomes.length > 0 &&
+    outcomes.every((o) => o.results.length > 0 && o.results.every((r) => r.type === 'request-error'))
+  )
+}
+
 // Runs every case through `ask(question)` (which resolves to
 // { answer, toolCalls, ... } or throws) and scores it. Never throws for a
 // single bad case: a failed request is recorded as a `request-error` failure

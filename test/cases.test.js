@@ -72,3 +72,19 @@ test('schedule cases fail against a baseline-style answer (that is their purpose
     assert.equal(scoreCase(c, baseline).pass, false, `${c.id} would already pass at baseline`)
   }
 })
+
+test('ticket-price needs a no-fare-data statement, not just the absence of "$"', () => {
+  const c = CASES.find((c) => c.id === 'ticket-price')
+  const say = (answer) => scoreCase(c, { answer, toolCalls: [] }).pass
+  assert.equal(say("I don't have fare or pricing information."), true)
+  assert.equal(say('The Acela is a fast train between the two cities.'), false) // silent dodge
+  assert.equal(say("I can't see prices, but it might be about 50 dollars."), false)
+  assert.equal(say('It costs $49.'), false)
+})
+
+test('cardinal case fails an answer that says yes', () => {
+  const c = CASES.find((c) => c.id === 'cardinal-no-boarding-was-nyc')
+  const baseline = { toolCalls: [{ name: 'find_trains' }] }
+  assert.equal(scoreCase(c, { ...baseline, answer: 'Yes, take Cardinal 50 from Washington.' }).pass, false)
+  assert.equal(scoreCase(c, { ...baseline, answer: "No: you can't board the Cardinal at Washington going to New York." }).pass, true)
+})

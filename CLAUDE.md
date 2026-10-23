@@ -97,7 +97,16 @@ npm test                     # unit tests only; free, no network
 ```
 
 Evals make ~40+ real model calls (a few tens of cents). Run them on demand,
-never in CI. The `schedule` cases are expected to fail until the schedule
+never in CI.
+
+Exit codes: `npm run eval` exits 0 even when some cases fail (it passes
+`--allow-failures` so npm doesn't print an error block on top of the results;
+failures are still listed and recorded). `node eval/run.js` directly exits 1 if
+any case failed, which is expected at baseline (the schedule cases). Either way,
+2 = setup problem (missing/empty env vars) and 3 = every request errored (bad
+key, spend limit, SSO), in which case nothing is written to RESULTS.md.
+`vercel env pull` writes empty values for Sensitive variables; if the runner
+says a variable is EMPTY, paste the real value into `.env.local`. The `schedule` cases are expected to fail until the schedule
 tools exist; that failure is the recorded baseline.
 
 ### The architecture rule
