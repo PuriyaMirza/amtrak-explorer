@@ -1,6 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { scoreCase, REFUSAL_PATTERN, withoutHolidayCaveats } from '../eval/score.js'
+import {
+  scoreCase,
+  REFUSAL_PATTERN_V1,
+  REFUSAL_PATTERN_LOOSE,
+  SCORER_VERSION,
+  withoutHolidayCaveats,
+  withoutScopeDisclaimers,
+} from '../eval/score.js'
 
 // Small helper: score a made-up case with the given checks and response.
 const score = (checks, response) => scoreCase({ id: 'x', category: 'easy', checks }, response)
@@ -116,16 +123,18 @@ test('missing answer is treated as an empty string, not a crash', () => {
   assert.doesNotThrow(() => score({ anyOfGroups: [['a']], refusalExpected: true }, {}))
 })
 
-test('REFUSAL_PATTERN recognises the phrasings seen from the live model', () => {
+test('REFUSAL_PATTERN_V1 and _LOOSE recognise the phrasings seen from the live model', () => {
   for (const s of [
     "I can't take a train there",
     'There is no matching Amtrak station',
     'Amtrak does not serve Honolulu',
     'That is not possible',
   ]) {
-    assert.match(s, REFUSAL_PATTERN)
+    assert.match(s, REFUSAL_PATTERN_V1)
+    assert.match(s, REFUSAL_PATTERN_LOOSE)
   }
-  assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN)
+  assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN_V1)
+  assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN_LOOSE)
 })
 
 test('RegExp entries in a group are tested as regexes (word boundaries work)', () => {
@@ -183,4 +192,115 @@ test('withoutHolidayCaveats cuts only the caveat clause, so other refusal wordin
   )
   assert.equal(withoutHolidayCaveats('No caveat here.'), 'No caveat here.')
   assert.equal(withoutHolidayCaveats(''), '')
+})
+
+// ---- scorer v2: plural refusals and scope disclaimers ----------------------
+
+const ANCHORAGE_ANSWER =
+  'There are no trains from Seattle to Anchorage. I searched for Anchorage and found no station or route ' +
+  'with that name in the Amtrak data.'
+const WEEKEND_ANSWER =
+  'Friday: Keystone 643 leaves New York Penn at 5:20 PM Eastern and arrives in Philadelphia at 7:05 PM. ' +
+  'Sunday: Acela 2250 leaves Philadelphia at 6:00 PM, so you get about 47 hours there. ' +
+  "Holiday schedules are not modelled, so please confirm on amtrak.com. I can't see fares or seat availability."
+
+test('SCORER_VERSION is 2 (first change after the original scorer)', () => {
+  assert.equal(SCORER_VERSION, 2)
+})
+
+test('refusalExpected: the real anchorage-refusal answer passes (plural "no trains")', () => {
+  assert.match(ANCHORAGE_ANSWER, REFUSAL_PATTERN_LOOSE)
+  assert.equal(score({ refusalExpected: true }, { answer: ANCHORAGE_ANSWER }).pass, true)
+})
+
+test('REFUSAL_PATTERN_LOOSE accepts plurals; the narrow V1 pattern does not (so noRefusal stays v1-like)', () => {
+  for (const s of [
+    'No trains run there.',
+    'There are no routes to Paris.',
+    'I found no stations by that name.',
+    'No direct trains go there.',
+    "I'm unable to find that.",
+    "I'm not able to look that up.",
+    "I couldn't find a station by that name.",
+    "That route isn't served by Amtrak.",
+  ]) {
+    assert.match(s, REFUSAL_PATTERN_LOOSE)
+  }
+  for (const s of [
+    'No trains run there.',
+    'There are no routes to Paris.',
+    'No direct trains go there.',
+  ]) {
+    assert.doesNotMatch(s, REFUSAL_PATTERN_V1)
+  }
+  for (const s of [
+    'Three trains run each day, and the route is served by the Acela.',
+    'Amtrak trains serve Boston and New York.',
+    'The station is open daily.',
+    'The last train leaves at 9:30 PM; there are no trains after 11 PM.',
+    'There are no stations between New York and Boston other than NHV.',
+  ]) {
+    assert.doesNotMatch(s, REFUSAL_PATTERN_LOOSE)
+  }
+})
+
+test('noRefusal: the real weekend-generic-philadelphia answer passes (scope disclaimer)', () => {
+  assert.equal(score({ noRefusal: true }, { answer: WEEKEND_ANSWER }).pass, true)
+})
+
+test('noRefusal: scope disclaimers about fares, seats, delays, booking, connections pass', () => {
+  for (const tail of [
+    "I can't see fares or seat availability.",
+    'I cannot book tickets or show live delays.',
+    "I can't see fares, seat availability, or real-time delays.",
+    "I don't have fare information or live delay info.",
+    "I can't make reservations, but you can book on amtrak.com.",
+    "Direct trains only, so I can't show connections.",
+    "I can't tell you anything about fares.",
+  ]) {
+    const answer = `Train 66 leaves at 5:44 AM Eastern. ${tail}`
+    assert.equal(score({ noRefusal: true }, { answer }).pass, true, tail)
+  }
+})
+
+test('noRefusal: a real refusal still fails when a fare disclaimer is attached', () => {
+  for (const answer of [
+    WEEKEND_ANSWER.replace(/^.*Holiday/, 'Holiday').replace('Holiday', "I can't look that up. Holiday"),
+    "I can't look that up, and I can't see fares.",
+    "I can't give you times, and I can't see fares or seat availability.",
+    "I can't see fares, and there is no matching Amtrak station.",
+    "I can't see fares or give you any times.",
+    "I can't see fares, delays, or times.",
+    "I can't see fares or the schedule.",
+    "I can't see connections between Boston and Paris.",
+    "I can't find fares or trains.",
+    "I can't check availability of trains on that route.",
+    "I can't check seat availability of trains from Boston to Paris.",
+    "I can't find any connections from Boston to Anchorage.",
+    'There are no trains from Boston to Anchorage. Fares are not available.',
+    'There are no direct trains. I can\'t see fares.',
+    "I don't have schedule data for that. Fares are not available either.",
+    // bare "X are not available" sentences are not cut, as in v1
+    'Fares and booking are not available through this tool.',
+  ]) {
+    const r = score({ noRefusal: true }, { answer })
+    assert.equal(r.pass, false, answer)
+    assert.deepEqual(failedTypes(r), ['wrong-refusal'])
+  }
+})
+
+test('withoutScopeDisclaimers cuts only the disclaimer clause', () => {
+  assert.equal(withoutScopeDisclaimers("I can't see fares or seat availability."), 'I .')
+  assert.equal(
+    withoutScopeDisclaimers("I can't look that up, and I can't see fares."),
+    "I can't look that up, and I .",
+  )
+  assert.equal(withoutScopeDisclaimers("I can't see fares or give times."), "I can't see fares or give times.")
+  assert.equal(withoutScopeDisclaimers('No disclaimer here.'), 'No disclaimer here.')
+  assert.equal(withoutScopeDisclaimers(''), '')
+})
+
+test('scope disclaimers do not rescue refusalExpected or declineConstraint', () => {
+  assert.equal(score({ refusalExpected: true }, { answer: "I can't see fares." }).pass, true)
+  assert.equal(score({ declineConstraint: true }, { answer: 'No fares are shown.' }).pass, false)
 })

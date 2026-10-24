@@ -9,7 +9,7 @@ Columns:
 
 - **Date (UTC)**: when the run started, ISO 8601.
 - **Mode**: `local` (askQuestion called in-process with real clients) or `remote` (HTTP to ASK_URL).
-- **Model / Prompt**: the pinned model and `PROMPT_VERSION` the run used.
+- **Model / Prompt**: the pinned model and `PROMPT_VERSION` the run used. Rows from scorer v2 on append the scorer version, e.g. `v3 (scorer 2)`; a bare `v3` was scored by scorer v1.
 - **Pass**: cases passed / cases run. A case passes only if ALL its checks pass.
 - **By category**: the same, per case category (easy, ambiguous, adversarial, schedule).
 - **Failure types**: how many *failed checks* of each type (a case can fail several checks, so this can exceed the number of failed cases). Types:
@@ -22,6 +22,33 @@ Columns:
   - `wrong-tool`: never called the tool the question needs
   - `request-error`: the request itself failed (HTTP/API error)
 - **Failed cases**: ids of the cases that failed (see eval/cases.js).
+
+Scorer changes (`SCORER_VERSION` in eval/score.js). A scorer change moves pass
+rates just like a prompt change, so rows scored by different versions are not
+directly comparable. Existing rows are untouched and are implicitly scorer v1.
+
+- **v1**: the original scorer.
+- **v2**: three changes, kept as close to v1 as possible. Rule: v2 is never wrong where v1 was right.
+  1. `refusalExpected` / `declineConstraint` use a wider pattern: v1 plus plural
+     "no trains / no routes / no stations" (not when the next word is after, before,
+     on, during, until, past, between or stop, so "no trains after 11 PM" is not a
+     refusal), "unable to", "not able to", "couldn't / could not".
+  2. `noRefusal` keeps the narrow v1 pattern (plus "unable to", "not able to",
+     "couldn't / could not"), so plural "no trains" does not flag a correct answer
+     ("No trains run on Christmas Day, but train 66 leaves at 5:44 AM").
+  3. `noRefusal` first cuts scope-disclaimer clauses of the shape "<can't / cannot /
+     unable to / not able to / don't have / do not have> [see, show, give, provide,
+     check, book, reserve, access, tell, know, offer, quote, confirm, make, process,
+     handle] <fares, prices, tickets, seat availability, delays, live status, booking,
+     reservations, connections>". Only the clause is cut, so "I can't look that up, and
+     I can't see fares" still fails. A clause is left alone if the negation continues
+     ("can't see fares or give times") or points at the route (between / from / to /
+     via / of). Bare "fares are not available" sentences are not cut. find, search and
+     look up are not disclaimer verbs. When a clause was cut, the rest is tested with
+     the wider pattern, since the cut "can't" no longer masks "There are no direct trains."
+  Motivating false negatives, both found in the post-PR-4 run (prompt v3):
+`anchorage-refusal` and `weekend-generic-philadelphia`. Known gaps are listed
+  in test/fixtures/scorer-adversarial.js (`knownLimitation`).
 
 | Date (UTC) | Mode | Model | Prompt | Pass | By category | Failure types | Failed cases |
 |---|---|---|---|---|---|---|---|

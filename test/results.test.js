@@ -24,9 +24,20 @@ const base = {
 test('formatResultsRow: every column in order', () => {
   assert.equal(
     formatResultsRow(base),
-    '| 2026-10-23T20:15Z | local | claude-sonnet-5-5 | v1 | 2/4 (50%) | ' +
+    '| 2026-10-23T20:15Z | local | claude-sonnet-5-5 | v1 (scorer 2) | 2/4 (50%) | ' +
       'easy 2/2, adversarial 0/1, schedule 0/1 | wrong-tool 1, wrong-refusal 1 | c, d |',
   )
+})
+
+test('formatResultsRow: records the scorer version next to the prompt version', () => {
+  assert.match(formatResultsRow(base), /\| v1 \(scorer 2\) \|/)
+  assert.match(formatResultsRow({ ...base, scorerVersion: 7 }), /\| v1 \(scorer 7\) \|/)
+})
+
+test('RESULTS_HEADER has a Scorer changes note naming the motivating cases', () => {
+  assert.match(RESULTS_HEADER, /Scorer changes/)
+  assert.match(RESULTS_HEADER, /anchorage-refusal/)
+  assert.match(RESULTS_HEADER, /weekend-generic-philadelphia/)
 })
 
 test('formatResultsRow: a perfect run has "-" for failure types and failed cases', () => {
@@ -37,7 +48,7 @@ test('formatResultsRow: a perfect run has "-" for failure types and failed cases
   })
   assert.equal(
     row,
-    '| 2026-10-23T20:15Z | local | claude-sonnet-5-5 | v1 | 1/1 (100%) | easy 1/1 | - | - |',
+    '| 2026-10-23T20:15Z | local | claude-sonnet-5-5 | v1 (scorer 2) | 1/1 (100%) | easy 1/1 | - | - |',
   )
 })
 

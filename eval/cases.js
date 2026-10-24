@@ -15,7 +15,7 @@
 //     None of these strings should appear in the answer. For flagging a
 //     hallucinated station/route we know isn't real.
 //   refusalExpected: true
-//     The answer should read as a refusal (see REFUSAL_PATTERN in
+//     The answer should read as a refusal (see REFUSAL_PATTERN_LOOSE in
 //     score.js). This is the "correct refusals" criterion — for questions
 //     with no real answer in the data (nonexistent places, no rail link).
 //   declineConstraint: true
@@ -30,7 +30,7 @@
 //
 //   noRefusal: true
 //     The mirror of refusalExpected: the answer must NOT read as a refusal
-//     (same REFUSAL_PATTERN). Use it where a real answer exists, to catch
+//     (same REFUSAL_PATTERN_LOOSE). Use it where a real answer exists, to catch
 //     the model declining a question it should have been able to answer.
 //     Sentences about holidays are ignored, because correct schedule answers
 //     must say "I can't account for holidays" (see withoutHolidayCaveats in
@@ -358,7 +358,7 @@ export const CASES = [
     // the system prompt forbids inventing prices. Two checks: no price of any
     // kind (a "$" or the word dollars/USD), AND an explicit statement that it
     // has no fare/pricing data. The second group is phrased as "no data"
-    // wording rather than reusing REFUSAL_PATTERN, which misses "I don't have".
+    // wording rather than reusing REFUSAL_PATTERN_V1, which misses "I don't have".
     checks: {
       noneOf: ['$', 'dollars', 'usd'],
       anyOfGroups: [
