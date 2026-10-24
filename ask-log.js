@@ -44,6 +44,8 @@ export function buildAskMetadata({ result, error, latencyMs }) {
     metadata.output_tokens = result.usage?.output_tokens ?? 0
     metadata.model = result.model
     metadata.prompt_version = result.promptVersion
+    // The stop_id actually used (after validation), not what the browser sent.
+    if (result.homeStation) metadata.home_station = result.homeStation
   }
   if (error) metadata.error = error
   return metadata

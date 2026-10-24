@@ -29,6 +29,11 @@ This matters as much as the code. Read it before doing anything.
   faster in Finder or VS Code. Write file contents directly rather than handing
   over heredocs to paste.
 - **Be concise.** Bullets and tables over paragraphs where they fit.
+- **Always flag prompt-injection risks** (Puriya's standing request). Any time
+  text from a request, a URL, the database or a tool result could end up in a
+  prompt or in the model's instructions, say so explicitly, even if it's
+  out of scope for the current task, and propose the guard. Default guard: only
+  values validated against our own data reach the prompt (see `resolveHomeStation`).
 
 ### Debugging lessons learned the hard way
 
@@ -93,7 +98,7 @@ api/search.js       GET  /api/search?q=   → searchTrains
 api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
 api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
                     builds clients from env) → askQuestion → logAsk
-eval/cases.js       40 eval cases (easy / ambiguous / adversarial / schedule)
+eval/cases.js       41 eval cases (easy / ambiguous / adversarial / schedule)
 eval/score.js       scoreCase() — deterministic checks, no LLM judge
 eval/taxonomy.js    check → named failure type (hallucinated-entity, ...)
 eval/runner.js      runCases(), chooseMode() — the loop, testable with a fake ask
@@ -191,7 +196,8 @@ Deliberate choices:
   `device_id`/`session_id` come from the browser if sent, else `'unknown'` (both
   columns are NOT NULL). `metadata` keys: `answer`, `tool_calls`
   (`[{name, input, row_count | error}]`, no result rows), `rounds`, `latency_ms`,
-  `input_tokens`, `output_tokens`, `model`, `prompt_version`, `error` (failures
+  `input_tokens`, `output_tokens`, `model`, `prompt_version`, `home_station` (the
+  validated stop_id used, v4+), `error` (failures
   only; then no answer/tool_calls). Logging happens in `api/ask.js` via
   `logAsk`, never inside `askQuestion`, so `npm run eval` (local mode) writes no
   rows. A log failure or a 2s timeout is swallowed and never affects the answer.
@@ -257,6 +263,10 @@ text goes back to the model as the tool result so it can correct itself.
   never from the model, so the model can't choose what "today" is. The same date is
   appended to the system prompt per request (`systemPromptFor`) so "next Thursday"
   can be turned into a date.
+- **Home station is validated, never echoed.** `home_station` from the browser goes
+  through `resolveHomeStation`: id-shaped (`[A-Za-z0-9]{1,10}`) and an exact `stops.stop_id`
+  match, else the default (NYP). Only our table's id and name reach the prompt, so request
+  text can't inject instructions. `test/home-station.test.js` guards this.
 - **Row caps.** `find_trains` returns 12 trains by default (20 max); its `summary`
   still covers all trains. `plan_weekend` caps pairs (see below).
 - The model supplies parameters only; every query is a fixed one in `search.js` /
@@ -269,9 +279,11 @@ text goes back to the model as the tool result so it can correct itself.
   whenever the system prompt or tools change in a way that could move the pass rate.
   - **v1**: baseline, `search_trains` only (the recorded baseline run)
   - **v2**: adds `find_trains` (PR 3)
-  - **v3**: adds `plan_weekend` (PR 4); current
+  - **v3**: adds `plan_weekend` (PR 4)
+  - **v4**: adds the home station (default New York Penn; the browser can send another
+    stop_id as `home_station`); current
 
-**System prompt rules (v3)** (if you reword them, update `eval/cases.js`, which looks
+**System prompt rules (v4)** (if you reword them, update `eval/cases.js`, which looks
 for some of these phrases)
 - Only state stations, routes, train numbers, times and durations that a tool returned;
   never invent a station, schedule or price.
@@ -281,6 +293,8 @@ for some of these phrases)
 - Add one short **holiday caveat** to every schedule answer: holiday schedules are not
   modelled, confirm on amtrak.com.
 - Use `plan_weekend` for go-and-come-back questions, `find_trains` for one-way.
+- **Home station** (v4): no departure station given → leave from the home station and say
+  so ("from New York Penn Station"). Added per request by `systemPromptFor`, like today's date.
 - Direct trains only; no fares, live delays, seat availability or booking. Say so rather than guess.
 - Ambiguous station names: say which matched. Plain text only (no markdown). A few sentences.
 

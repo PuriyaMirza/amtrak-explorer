@@ -47,6 +47,9 @@ export function createHandler({ makeClients }) {
     // placeholder because the table requires both.
     const deviceId = cleanId(req.body?.device_id)
     const sessionId = cleanId(req.body?.session_id)
+    // The station picker's stop_id. Passed on unchecked: askQuestion only lets
+    // a real id from our `stops` table into the prompt (resolveHomeStation).
+    const homeStation = req.body?.home_station
 
     try {
       const { anthropic, sql } = makeClients()
@@ -54,7 +57,7 @@ export function createHandler({ makeClients }) {
       const startedAt = Date.now()
       let result
       try {
-        result = await askQuestion({ anthropic, sql, question })
+        result = await askQuestion({ anthropic, sql, question, homeStation })
       } catch (err) {
         // Log the failed ask too, then let the outer catch send the 500.
         await logAsk(sql, {
