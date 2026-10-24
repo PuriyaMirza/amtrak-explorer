@@ -3,7 +3,8 @@ import { insertEvent } from '../event-store.js'
 
 // Event types a BROWSER may submit. 'ask' is deliberately absent: ask rows are
 // written server-side only (api/ask.js), so a browser can't forge them.
-const VALID_TYPES = ['search', 'click']
+// 'home_station': the person picked a new station (target_id = stop_id).
+const VALID_TYPES = ['search', 'click', 'home_station']
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
