@@ -78,6 +78,8 @@ weekend.js          planWeekend(sql, {from, to, outDate|outDay, returnDate|retur
                     Plain data, reusable by a future browse "weekend finder"
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
                     also exports deviceId/sessionId (index.html sends them to /api/ask)
+tool-summary.js     describeToolCall(call) — one line per tool call for the
+                    "Lookups:" note under an answer (pure; index.html escapes it)
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
 ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never throws,
                     2s timeout); buildAskMetadata() shapes the metadata
