@@ -204,7 +204,6 @@ Deliberate choices:
    comment in `sql/001_events_table.sql`. Leave it or drop it, but don't mistake
    it for active protection.
 3. ~~`/api/ask` doesn't log~~ — done: see `event_type = 'ask'` above.
-4. **Durations across a DST change** moved to "Known limitations" below.
 
 ### Migrating another project to Neon (recipe that worked)
 
@@ -403,7 +402,7 @@ blocked on having enough data to say anything honest.
 - [x] **Next** — A richer tool. Done, and bigger than planned: `find_trains` (PR 3)
       and `plan_weekend` (PR 4) instead of a single `routes_for_station`.
       ("What serves X" was already answerable via `search_trains`' `routes` list.)
-- [x] **C** — Eval harness (mostly done, PR 1): 40 cases (easy / ambiguous /
+- [x] **C** — Eval harness (done except a UI "run all" button, PR 1): 40 cases (easy / ambiguous /
       adversarial / schedule), deterministic scoring (no LLM judge), prompt version
       + pass rate logged per run in `eval/RESULTS.md`, named failure taxonomy.
       - [ ] "Run all" **button**: not built. The CLI (`npm run eval`) is the runner.

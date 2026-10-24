@@ -55,7 +55,7 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
 **Shipped: #3, 2026-10-23.** Baseline run (prompt v1) recorded in `eval/RESULTS.md`: 27/40, schedule 0/13.
 
 - `eval/run.js` gains a **local mode** (default when `DATABASE_URL` + `ANTHROPIC_API_KEY`
-  are set, e.g. after `vercel env pull`). It calls the `api/ask.js` handler in-process, with
+  are set, e.g. after `vercel env pull`). It calls `askQuestion` (ask-core.js) in-process, with
   no HTTP and no SSO. Remote mode (`ASK_URL`) stays.
 - Extract the ask logic into `ask-core.js` (`askQuestion({ anthropic, sql, question })`) so the
   endpoint, the eval runner and the tests share one implementation.
