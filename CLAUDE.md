@@ -363,8 +363,7 @@ Replaces the old "the tool is too thin" problem, which `find_trains` and `plan_w
 
 ---
 
-## SQL learned (snippets saved in Supabase SQL Editor — note: that's the OLD
-host; re-save the useful ones in Neon)
+## SQL learned (snippets now in `sql/snippets_from_supabase.sql`; the Supabase project is deleted)
 
 `table_row_counts` · `find_trip_by_route_name` · `full_itinerary_join` ·
 `dwell_time_per_stop` · `leg_duration_between_stops` · `overnight_trips_count` ·
@@ -443,19 +442,21 @@ blocked on having enough data to say anything honest.
 - **Post-PR-4** (2026-10-24, prompt v3, local, scorer v1): **38/40 (95%)**. schedule 12/13,
   adversarial 9/10. Both failures (`anchorage-refusal`, `weekend-generic-philadelphia`) were
   **scorer false negatives**, not model bugs; fixed in scorer v2 (`SCORER_VERSION` in
-  `eval/score.js`: plural refusal phrases, scope-disclaimer stripping). **Re-run pending**
-  to record the scorer-v2 row. Rows from different scorer versions are not directly comparable
-  (see the "Scorer changes" note in `eval/RESULTS.md`).
+  `eval/score.js`: plural refusal phrases, scope-disclaimer stripping). Rows from different
+  scorer versions are not directly comparable (see the "Scorer changes" note in `eval/RESULTS.md`).
+- **Scorer v2 re-run** (2026-10-24, prompt v3, scorer 2): **40/40 (100%)**, schedule 13/13.
 
 ---
 
 ## Open items for the next session
 
+**Start with `docs/HANDOFF.md`**: it has the current state and the two items found in
+the live test (the "Searched for: undefined" UI bug; the default-origin vs conversation-memory decision).
+
 - [x] **(a) Post-PR-4 eval run.** Done (38/40, 2026-10-24); both failures were scorer bugs, fixed in
       scorer v2. Optional follow-up: re-run `npm run eval` to record a scorer-v2 row.
-- [ ] **(b) Supabase `amtrak-explorer` project is paused.** Puriya exports the saved SQL
-      snippets (see "SQL learned"), then the project gets deleted. **Confirm first**,
-      never delete without asking. (`bike-forecast` still lives on Supabase; don't touch it.)
+- [x] **(b) Supabase `amtrak-explorer` project:** deleted 2026-10-24 after the 13 snippets were
+      saved to `sql/snippets_from_supabase.sql`. (`bike-forecast` still lives on Supabase; don't touch it.)
 - [ ] **(c) Inert RLS on `events`.** Decide: drop it or keep it (see Known cleanup items).
 - [ ] **(d) The planning repo `amtrak-trip-planner`** (static-JSON design, now reference
       only) has an unmerged draft PR #1 (the M0 spike). Close or merge it.
