@@ -18,6 +18,7 @@
 
   <script type="module">
     import { logEvent, deviceId, sessionId } from './events.js'
+    import { formatToolCall } from './tool-labels.js'
 
     const input = document.getElementById('q')
     const results = document.getElementById('results')
@@ -159,8 +160,9 @@
         // Show what the model actually looked up. This is the transparency
         // that makes the eval work possible later.
         if (data.toolCalls?.length) {
-          parts.push('<p class="status">Searched for: ' +
-            data.toolCalls.map(c => `<code>${c.query}</code>`).join(', ') + '</p>')
+          // One line per tool call; formatToolCall knows each tool's input shape.
+          parts.push('<p class="status">' +
+            data.toolCalls.map(c => escapeHtml(formatToolCall(c))).join('<br>') + '</p>')
         } else {
           parts.push('<p class="status">Answered without searching.</p>')
         }

@@ -76,6 +76,8 @@ weekend.js          planWeekend(sql, {from, to, outDate|outDay, returnDate|retur
                     round trips: pairs outbound + return trains (built on
                     findDirectTrains, no SQL of its own) and reports hoursAtDestination.
                     Plain data, reusable by a future browse "weekend finder"
+tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown
+                    under ask answers (pure; unit-tested)
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
                     also exports deviceId/sessionId (index.html sends them to /api/ask)
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
