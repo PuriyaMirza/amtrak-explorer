@@ -440,16 +440,19 @@ blocked on having enough data to say anything honest.
 - **Baseline** (2026-10-23, prompt v1, local): **27/40 (68%)**. easy 9/9, ambiguous 8/8,
   adversarial 10/10, **schedule 0/13**. Failure types: wrong-tool 13, wrong-time 12,
   wrong-refusal 11. This is the "before" number.
-- **Post-PR-4 run: pending.** Puriya runs `npm run eval` locally (prompt v3) and commits
-  the new row. The "after" number for the schedule category isn't recorded until then.
-  Compare rows with the same case count and check which `PROMPT_VERSION` changed.
+- **Post-PR-4** (2026-10-24, prompt v3, local, scorer v1): **38/40 (95%)**. schedule 12/13,
+  adversarial 9/10. Both failures (`anchorage-refusal`, `weekend-generic-philadelphia`) were
+  **scorer false negatives**, not model bugs; fixed in scorer v2 (`SCORER_VERSION` in
+  `eval/score.js`: plural refusal phrases, scope-disclaimer stripping). **Re-run pending**
+  to record the scorer-v2 row. Rows from different scorer versions are not directly comparable
+  (see the "Scorer changes" note in `eval/RESULTS.md`).
 
 ---
 
 ## Open items for the next session
 
-- [ ] **(a) Post-PR-4 eval run.** Puriya runs `npm run eval` locally and commits the new
-      `eval/RESULTS.md` row (needs `.env.local`, see Running evals). Costs a few tens of cents.
+- [x] **(a) Post-PR-4 eval run.** Done (38/40, 2026-10-24); both failures were scorer bugs, fixed in
+      scorer v2. Optional follow-up: re-run `npm run eval` to record a scorer-v2 row.
 - [ ] **(b) Supabase `amtrak-explorer` project is paused.** Puriya exports the saved SQL
       snippets (see "SQL learned"), then the project gets deleted. **Confirm first**,
       never delete without asking. (`bike-forecast` still lives on Supabase; don't touch it.)
