@@ -7,7 +7,8 @@
 //   note             why
 //   knownLimitation  true when today's result is NOT what we would ideally want;
 //                    `ideal` then holds the result we would want. These document
-//                    gaps we accepted to keep the scorer a minimal change from v1.
+//                    gaps we accepted to keep the scorer a minimal change from v1 (all of them
+//                    score the same under the frozen v1 scorer; see score-adversarial.test.js).
 //                    If you fix one, flip `pass` to match `ideal` and drop the flag.
 export const SCORER_ADVERSARIAL_FIXTURES = [
   {
@@ -37,10 +38,8 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
   {
     "check": "noRefusal",
     "answer": "I don't have schedule data for that. Fares are not available either.",
-    "pass": true,
-    "knownLimitation": true,
-    "ideal": false,
-    "note": "v1 and v2 don't match \"don't have\" (only \"doesn't have\"); the refusal goes unseen, so this passes noRefusal."
+    "pass": false,
+    "note": "Real refusal (possibly with a disclaimer attached): must still fail noRefusal."
   },
   {
     "check": "noRefusal",
@@ -120,13 +119,15 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": true,
     "knownLimitation": true,
     "ideal": false,
-    "note": "\"do not have\" is not in REFUSAL_PATTERN; passes noRefusal although it refuses schedules."
+    "note": "\"do not have\" is not a refusal phrase in v1 or v2, and the disclaimer is not cut because \"or schedules\" continues the negation; passes noRefusal although it refuses schedules."
   },
   {
     "check": "noRefusal",
     "answer": "No trains run between those stations. Booking isn't something I can do.",
-    "pass": false,
-    "note": "Real refusal (possibly with a disclaimer attached): must still fail noRefusal."
+    "pass": true,
+    "knownLimitation": true,
+    "ideal": false,
+    "note": "noRefusal uses the narrow pattern, which ignores plural \"no trains\" (so \"No trains run on Christmas Day, but...\" still passes); this real refusal therefore passes noRefusal, as in v1."
   },
   {
     "check": "noRefusal",
@@ -164,7 +165,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": true,
     "knownLimitation": true,
     "ideal": false,
-    "note": "\"don't have\" is not in REFUSAL_PATTERN; passes noRefusal although it refuses direct trains."
+    "note": "\"don't have\" is not a refusal phrase in v1 or v2, and the clause is not cut because \"or direct trains\" continues the negation; passes noRefusal although it refuses direct trains."
   },
   {
     "check": "noRefusal",
@@ -262,7 +263,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "No recognised topic word (delays/live status), so the clause is not stripped; fails noRefusal. Conservative by design."
+    "note": "No recognised topic word (delays/live status), so the clause is not cut and \"can't\" counts as a refusal. Same in v1. Conservative by design."
   },
   {
     "check": "noRefusal",
@@ -294,7 +295,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "The \"can't compare prices\" clause is not a recognised disclaimer verb; fails noRefusal. Conservative by design."
+    "note": "\"can't compare prices\" is not a recognised disclaimer verb, so \"can't\" counts as a refusal. Same in v1. Conservative by design."
   },
   {
     "check": "noRefusal",
@@ -302,7 +303,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "\"how much a ticket costs\" is not a recognised topic; fails noRefusal. Conservative by design."
+    "note": "\"how much a ticket costs\" is not a recognised topic, so \"can't\" counts as a refusal. Same in v1. Conservative by design."
   },
   {
     "check": "noRefusal",
@@ -310,7 +311,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "\"look up\" is deliberately not a disclaimer verb (it is how the model refuses the real question); fails noRefusal."
+    "note": "\"look up\" is deliberately not a disclaimer verb (it is how the model refuses the real question), so \"can't\" counts as a refusal. Same in v1."
   },
   {
     "check": "noRefusal",
@@ -318,7 +319,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "\"find\" is deliberately not a disclaimer verb; fails noRefusal."
+    "note": "\"find\" is deliberately not a disclaimer verb, so \"can't\" counts as a refusal. Same in v1."
   },
   {
     "check": "noRefusal",
@@ -362,7 +363,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "\"don't go/run/operate\" phrasings are deliberately not in REFUSAL_PATTERN (they flag correct answers like \"the Acela doesn't run before 7 AM\"); misses refusalExpected."
+    "note": "\"don't go/run/operate\" phrasings are not in either pattern (adding them would flag correct answers like \"the Acela doesn't run before 7 AM\"); misses refusalExpected, as in v1."
   },
   {
     "check": "refusalExpected",
@@ -370,7 +371,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "Same: \"doesn't run\" is not in REFUSAL_PATTERN."
+    "note": "Same: \"doesn't run\" is in neither pattern; misses refusalExpected, as in v1."
   },
   {
     "check": "refusalExpected",
@@ -378,7 +379,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "Same: \"does not operate\" is not in REFUSAL_PATTERN."
+    "note": "Same: \"does not operate\" is in neither pattern; misses refusalExpected, as in v1."
   },
   {
     "check": "refusalExpected",
@@ -431,10 +432,8 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
   {
     "check": "noRefusal",
     "answer": "No trains run on Christmas Day, but on 2026-10-29 train 66 leaves at 5:44 AM.",
-    "pass": false,
-    "knownLimitation": true,
-    "ideal": true,
-    "note": "\"No trains run\" reads as a refusal (it is also how real refusals read); fails noRefusal. Conservative by design."
+    "pass": true,
+    "note": "Correct answer or pure scope/holiday disclaimer: must not read as a refusal."
   },
   {
     "check": "noRefusal",
@@ -463,10 +462,8 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
   {
     "check": "noRefusal",
     "answer": "There are no direct routes with a faster time than the Acela 2150.",
-    "pass": false,
-    "knownLimitation": true,
-    "ideal": true,
-    "note": "\"no direct routes\" reads as a refusal even though it is a true statement inside an answer; fails noRefusal."
+    "pass": true,
+    "note": "Correct answer or pure scope/holiday disclaimer: must not read as a refusal."
   },
   {
     "check": "noRefusal",
@@ -474,7 +471,7 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "pass": false,
     "knownLimitation": true,
     "ideal": true,
-    "note": "\"doesn't have\" is in the v1 pattern; fails noRefusal. Conservative by design."
+    "note": "\"doesn't have\" is in the v1 pattern, so a correct answer containing it fails noRefusal. Same in v1. Conservative by design."
   },
   {
     "check": "declineConstraint",

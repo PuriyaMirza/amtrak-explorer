@@ -29,22 +29,26 @@ rates just like a prompt change, so rows scored by different versions are not
 directly comparable. Existing rows are untouched and are implicitly scorer v1.
 
 - **v1**: the original scorer.
-- **v2**: two changes, kept minimal from v1.
-  1. Refusal pattern adds plural "no trains / no routes / no stations" (not when
-     the next word is after/before/on/during/until/past/between/stop, so "no
-     trains after 11 PM" is not a refusal) and "unable to", "not able to",
-     "couldn't / could not".
-  2. \`noRefusal\` cuts scope-disclaimer clauses before testing: "<can't / cannot /
-     unable to / don't / do not> <see, show, give, provide, check, book, reserve,
-     access, have, tell, know, offer, quote, confirm, make, process, handle>
-     <fares, prices, tickets, seat availability, delays, live status, booking,
-     reservations, connections>", or "<those topics> aren't available / supported".
-     Only the clause is cut, so "I can't look that up, and I can't see fares" still
-     fails. A clause is left alone (and still counts as a refusal) if the negation
-     continues ("can't see fares or give times") or points at the route ("between /
-     from / to / via / of"). find, search and look up are deliberately not disclaimer verbs.
+- **v2**: three changes, kept as close to v1 as possible. Rule: v2 is never wrong where v1 was right.
+  1. \`refusalExpected\` / \`declineConstraint\` use a wider pattern: v1 plus plural
+     "no trains / no routes / no stations" (not when the next word is after, before,
+     on, during, until, past, between or stop, so "no trains after 11 PM" is not a
+     refusal), "unable to", "not able to", "couldn't / could not".
+  2. \`noRefusal\` keeps the narrow v1 pattern (plus "unable to", "not able to",
+     "couldn't / could not"), so plural "no trains" does not flag a correct answer
+     ("No trains run on Christmas Day, but train 66 leaves at 5:44 AM").
+  3. \`noRefusal\` first cuts scope-disclaimer clauses of the shape "<can't / cannot /
+     unable to / not able to / don't have / do not have> [see, show, give, provide,
+     check, book, reserve, access, tell, know, offer, quote, confirm, make, process,
+     handle] <fares, prices, tickets, seat availability, delays, live status, booking,
+     reservations, connections>". Only the clause is cut, so "I can't look that up, and
+     I can't see fares" still fails. A clause is left alone if the negation continues
+     ("can't see fares or give times") or points at the route (between / from / to /
+     via / of). Bare "fares are not available" sentences are not cut. find, search and
+     look up are not disclaimer verbs. When a clause was cut, the rest is tested with
+     the wider pattern, since the cut "can't" no longer masks "There are no direct trains."
   Motivating false negatives, both found in the post-PR-4 run (prompt v3):
-  \`anchorage-refusal\` and \`weekend-generic-philadelphia\`. Known gaps are listed
+\`anchorage-refusal\` and \`weekend-generic-philadelphia\`. Known gaps are listed
   in test/fixtures/scorer-adversarial.js (\`knownLimitation\`).
 
 | Date (UTC) | Mode | Model | Prompt | Pass | By category | Failure types | Failed cases |

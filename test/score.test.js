@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   scoreCase,
-  REFUSAL_PATTERN,
+  REFUSAL_PATTERN_V1,
+  REFUSAL_PATTERN_LOOSE,
   SCORER_VERSION,
   withoutHolidayCaveats,
   withoutScopeDisclaimers,
@@ -122,16 +123,18 @@ test('missing answer is treated as an empty string, not a crash', () => {
   assert.doesNotThrow(() => score({ anyOfGroups: [['a']], refusalExpected: true }, {}))
 })
 
-test('REFUSAL_PATTERN recognises the phrasings seen from the live model', () => {
+test('REFUSAL_PATTERN_V1 and _LOOSE recognise the phrasings seen from the live model', () => {
   for (const s of [
     "I can't take a train there",
     'There is no matching Amtrak station',
     'Amtrak does not serve Honolulu',
     'That is not possible',
   ]) {
-    assert.match(s, REFUSAL_PATTERN)
+    assert.match(s, REFUSAL_PATTERN_V1)
+    assert.match(s, REFUSAL_PATTERN_LOOSE)
   }
-  assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN)
+  assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN_V1)
+  assert.doesNotMatch('The Acela serves Boston and New York.', REFUSAL_PATTERN_LOOSE)
 })
 
 test('RegExp entries in a group are tested as regexes (word boundaries work)', () => {
@@ -206,11 +209,11 @@ test('SCORER_VERSION is 2 (first change after the original scorer)', () => {
 })
 
 test('refusalExpected: the real anchorage-refusal answer passes (plural "no trains")', () => {
-  assert.match(ANCHORAGE_ANSWER, REFUSAL_PATTERN)
+  assert.match(ANCHORAGE_ANSWER, REFUSAL_PATTERN_LOOSE)
   assert.equal(score({ refusalExpected: true }, { answer: ANCHORAGE_ANSWER }).pass, true)
 })
 
-test('REFUSAL_PATTERN accepts plurals and still rejects normal answers', () => {
+test('REFUSAL_PATTERN_LOOSE accepts plurals; the narrow V1 pattern does not (so noRefusal stays v1-like)', () => {
   for (const s of [
     'No trains run there.',
     'There are no routes to Paris.',
@@ -221,7 +224,14 @@ test('REFUSAL_PATTERN accepts plurals and still rejects normal answers', () => {
     "I couldn't find a station by that name.",
     "That route isn't served by Amtrak.",
   ]) {
-    assert.match(s, REFUSAL_PATTERN)
+    assert.match(s, REFUSAL_PATTERN_LOOSE)
+  }
+  for (const s of [
+    'No trains run there.',
+    'There are no routes to Paris.',
+    'No direct trains go there.',
+  ]) {
+    assert.doesNotMatch(s, REFUSAL_PATTERN_V1)
   }
   for (const s of [
     'Three trains run each day, and the route is served by the Acela.',
@@ -230,7 +240,7 @@ test('REFUSAL_PATTERN accepts plurals and still rejects normal answers', () => {
     'The last train leaves at 9:30 PM; there are no trains after 11 PM.',
     'There are no stations between New York and Boston other than NHV.',
   ]) {
-    assert.doesNotMatch(s, REFUSAL_PATTERN)
+    assert.doesNotMatch(s, REFUSAL_PATTERN_LOOSE)
   }
 })
 
@@ -243,7 +253,7 @@ test('noRefusal: scope disclaimers about fares, seats, delays, booking, connecti
     "I can't see fares or seat availability.",
     'I cannot book tickets or show live delays.',
     "I can't see fares, seat availability, or real-time delays.",
-    'Fares and booking are not available through this tool.',
+    "I don't have fare information or live delay info.",
     "I can't make reservations, but you can book on amtrak.com.",
     "Direct trains only, so I can't show connections.",
     "I can't tell you anything about fares.",
@@ -268,6 +278,10 @@ test('noRefusal: a real refusal still fails when a fare disclaimer is attached',
     "I can't check seat availability of trains from Boston to Paris.",
     "I can't find any connections from Boston to Anchorage.",
     'There are no trains from Boston to Anchorage. Fares are not available.',
+    'There are no direct trains. I can\'t see fares.',
+    "I don't have schedule data for that. Fares are not available either.",
+    // bare "X are not available" sentences are not cut, as in v1
+    'Fares and booking are not available through this tool.',
   ]) {
     const r = score({ noRefusal: true }, { answer })
     assert.equal(r.pass, false, answer)

@@ -6,8 +6,9 @@ import { failureTypeOf } from './taxonomy.js'
 // prompt change does, and rows scored by different versions are not directly
 // comparable. Bump it whenever a change here could flip a case's result.
 //   1 = the original scorer (implicit; rows before this constant existed)
-//   2 = plural refusal phrases ("no trains") + "unable to"/"couldn't" +
-//       scope-disclaimer stripping in noRefusal
+//   2 = plural refusal phrases ("no trains") for refusalExpected/declineConstraint
+//       only + "unable to"/"couldn't" + scope-disclaimer stripping in noRefusal.
+//       Rule: never wrong where v1 was right (test/score-adversarial.test.js)
 //       (motivating false negatives: anchorage-refusal, weekend-generic-philadelphia)
 export const SCORER_VERSION = 2
 
@@ -15,18 +16,30 @@ export const SCORER_VERSION = 2
 // from the live model (e.g. "can't take a train", "no matching Amtrak
 // station", "doesn't serve"). Expand it when a real refusal slips past it.
 //
-// v2 changes, kept minimal on purpose (a wider pattern makes noRefusal fail
-// correct answers, e.g. "the Acela doesn't run on weekends before 7 AM"):
-//   - plural "no trains / no routes / no stations" (the model says "There are
-//     no trains from Seattle to Anchorage"), except when the next word shows a
-//     time or place qualifier ("no trains after 11 PM", "no stations between")
-//   - "unable to", "not able to", "couldn't / could not"
-export const REFUSAL_PATTERN =
-  /\b(can['’]?t|cannot|unable\s+to|not\s+able\s+to|could(?:n['’]?t|\s+not)|no\s+amtrak|doesn['’]?t\s+(serve|have|connect)|does\s+not\s+(serve|have|connect)|isn['’]?t\s+(served|possible)|no\s+(direct\s+)?(?:trains?|routes?|rail|stations?)(?!\s+(?:after|before|on|during|until|past|between|stop))|not\s+(possible|available)|no\s+matching)\b/i
+// Two patterns, because the two directions want opposite things:
+//   - noRefusal ("this answer must NOT read as a refusal") wants a NARROW
+//     pattern: every extra phrase risks flagging a correct answer ("No trains
+//     run on Christmas Day, but train 66 leaves at 5:44 AM"). It uses
+//     REFUSAL_PATTERN_V1: the original (v1) pattern plus "unable to",
+//     "not able to", "couldn't / could not".
+//   - refusalExpected / declineConstraint ("the answer must refuse") want a
+//     WIDER pattern, since recognising more refusal phrasings is the goal.
+//     REFUSAL_PATTERN_LOOSE adds plural "no trains / no routes / no stations"
+//     (the model says "There are no trains from Seattle to Anchorage"), except
+//     when the next word is a time or place qualifier ("no trains after 11 PM").
+export const REFUSAL_PATTERN_V1 =
+  /\b(can['’]?t|cannot|unable\s+to|not\s+able\s+to|could(?:n['’]?t|\s+not)|no\s+amtrak|doesn['’]?t\s+(serve|have|connect)|does\s+not\s+(serve|have|connect)|isn['’]?t\s+(served|possible)|no\s+(direct\s+)?(train|route|rail)|not\s+(possible|available)|no\s+matching)\b/i
+export const REFUSAL_PATTERN_LOOSE = new RegExp(
+  REFUSAL_PATTERN_V1.source.replace(
+    'no\\s+(direct\\s+)?(train|route|rail)',
+    'no\\s+(?:direct\\s+)?(?:trains?|routes?|rail|stations?)(?!\\s+(?:after|before|on|during|until|past|between|stop))',
+  ),
+  'i',
+)
 
 // A correct schedule answer is told (system prompt, v2) to add a caveat like
 // "I can't account for holiday schedules, so confirm on amtrak.com". That
-// clause contains "can't", which REFUSAL_PATTERN reads as a refusal, so a
+// clause contains "can't", which REFUSAL_PATTERN_V1 reads as a refusal, so a
 // right answer would fail noRefusal for doing what it was told.
 //
 // Fix: before testing noRefusal, cut out just the caveat CLAUSE (the
@@ -39,7 +52,7 @@ export const REFUSAL_PATTERN =
 //
 // Why not "pass if the answer contains an expected time"? Because that would
 // also pass "I can't look that up, but maybe the 6:53?", which IS a refusal,
-// and some cases have no expected time at all. Why not narrow REFUSAL_PATTERN?
+// and some cases have no expected time at all. Why not narrow REFUSAL_PATTERN_V1?
 // It has to keep matching "I can't ..." for the refusal cases.
 //
 // The clause shapes recognised: "<can't/cannot/unable to/don't/do not>
@@ -61,25 +74,26 @@ export function withoutHolidayCaveats(answer) {
 }
 
 // Scope disclaimers. The system prompt tells the model to say what it can't
-// do: fares, seat availability, live delays, booking, connections. A correct
-// schedule answer that ends "I can't see fares or seat availability." would
-// otherwise fail noRefusal for doing what it was told (case
-// weekend-generic-philadelphia, scorer v1).
+// do: fares, seat availability, live delays, booking. A correct schedule
+// answer that ends "I can't see fares or seat availability." would otherwise
+// fail noRefusal for doing what it was told (case weekend-generic-philadelphia,
+// scorer v1).
 //
 // Same approach as the holiday caveat: cut only the disclaimer CLAUSE and test
 // what is left, so a sentence that also refuses the real question keeps its
 // refusal wording ("I can't look that up, and I can't see fares" leaves
-// "I can't look that up, and I ."). Deliberately conservative; a clause is cut
-// only if ALL of these hold:
-//   - shape A: <can't/cannot/don't/...> <see/show/give/book/...> [filler] <topics>
-//     or shape B: <topics> <are not/aren't> <available/supported/possible/...>
+// "I can't look that up, and I ."). Deliberately narrow; a clause is cut only
+// if ALL of these hold:
+//   - shape: <can't / cannot / unable to / not able to / don't have / do not
+//     have> [see/show/give/book/...] [filler] <topics>. Bare "fares are not
+//     available" sentences are NOT cut (they stay refusal-like, as in v1).
 //   - the topics are only the out-of-scope ones (fares, prices, tickets, seat
 //     availability, delays/live status, booking/reservations, connections),
 //     joined by commas / "or" / "and"
 //   - nothing after the topics continues the negation onto something else
 //     ("can't see fares or the times", "or give times") or points at the actual
 //     route ("can't see connections between X and Y")
-// "have" is in the list ("I don't have fare information"). Verbs like find/search/look up are NOT in the list: those are how the model
+// Verbs like find/search/look up are NOT in the list: those are how the model
 // refuses the real question. Wording not recognised is simply not cut, and
 // fails noRefusal; loosen this when a real disclaimer wording shows up.
 const SCOPE_TOPIC = String.raw`(?:fares?(?:\s+(?:data|info(?:rmation)?))?|(?:ticket\s+)?prices?|pricing|tickets?|ticketing|` +
@@ -91,13 +105,13 @@ const SCOPE_TOPICS =
   SCOPE_FILLER + SCOPE_TOPIC +
   String.raw`(?:(?:\s*,\s*(?:(?:or|and|nor)\s+)?|\s+(?:or|and|nor)\s+)` + SCOPE_FILLER + SCOPE_TOPIC + String.raw`)*`
 const SCOPE_VERB =
-  String.raw`(?:see|show|give|provide|check|book|reserve|access|have|tell|know|offer|quote|confirm|make|process|handle)`
-const SCOPE_VP = String.raw`${SCOPE_VERB}(?:\s+or\s+${SCOPE_VERB})*\s+${SCOPE_TOPICS}`
+  String.raw`(?:see|show|give|provide|check|book|reserve|access(?:\s+to)?|tell|know|offer|quote|confirm|make|process|handle)`
+// The verb is optional ("I don't have fare information") but a verb chain may
+// be joined with "or" ("see or book").
+const SCOPE_VP = String.raw`(?:${SCOPE_VERB}(?:\s+or\s+${SCOPE_VERB})*\s+)?${SCOPE_TOPICS}`
 const SCOPE_DISCLAIMER = new RegExp(
-  String.raw`\b(?:(?:can['’]?t|cannot|unable\s+to|not\s+able\s+to|(?:do|does)\s*n['’]?t|(?:do|does)\s+not)\s+` +
-    String.raw`${SCOPE_VP}(?:\s*,?\s*(?:or|and)\s+${SCOPE_VP})*` +
-    String.raw`|${SCOPE_TOPICS}\s+(?:are\s+not|is\s+not|aren['’]?t|isn['’]?t)\s+` +
-    String.raw`(?:available|supported|possible|modell?ed|included|covered|offered))`,
+  String.raw`\b(?:can['’]?t|cannot|unable\s+to|not\s+able\s+to|(?:do|does)\s*n['’]?t\s+have|(?:do|does)\s+not\s+have)\s+` +
+    String.raw`${SCOPE_VP}(?:\s*,?\s*(?:or|and)\s+${SCOPE_VP})*`,
   'gi',
 )
 // What may NOT follow a matched clause (else it is left alone, so its refusal
@@ -158,19 +172,25 @@ export function scoreCase(caseDef, { answer, toolCalls }) {
   }
 
   if (checks.refusalExpected) {
-    add('refusalExpected', 'refusalExpected', REFUSAL_PATTERN.test(answer || ''))
+    add('refusalExpected', 'refusalExpected', REFUSAL_PATTERN_LOOSE.test(answer || ''))
   }
 
   if (checks.declineConstraint) {
-    add('declineConstraint', 'declineConstraint', REFUSAL_PATTERN.test(answer || ''))
+    add('declineConstraint', 'declineConstraint', REFUSAL_PATTERN_LOOSE.test(answer || ''))
   }
 
   // The mirror image of refusalExpected: the answer must NOT read as a
   // refusal. The holiday-caveat and scope-disclaimer clauses are exempt (see
   // withoutHolidayCaveats / withoutScopeDisclaimers).
   if (checks.noRefusal) {
-    const cleaned = withoutScopeDisclaimers(withoutHolidayCaveats(answer || ''))
-    add('noRefusal', 'noRefusal', !REFUSAL_PATTERN.test(cleaned))
+    const noHoliday = withoutHolidayCaveats(answer || '')
+    const cleaned = withoutScopeDisclaimers(noHoliday)
+    // When a disclaimer was cut, its "can't" no longer masks a plural refusal
+    // elsewhere ("There are no direct trains. I can't see fares." failed in v1
+    // only because of that "can't"), so the rest is tested with the wider
+    // pattern. Without a cut, the narrow pattern keeps v1's behavior.
+    const pattern = cleaned !== noHoliday ? REFUSAL_PATTERN_LOOSE : REFUSAL_PATTERN_V1
+    add('noRefusal', 'noRefusal', !pattern.test(cleaned))
   }
 
   if (checks.toolQueriesInclude) {
