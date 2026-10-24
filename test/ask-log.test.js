@@ -162,3 +162,36 @@ test('a failed find_trains call logs its input and the error', () => {
   })
   assert.deepEqual(m.tool_calls, [{ name: 'find_trains', input: { from: 'NYP', to: 'BOS', date: 'bad' }, error: 'bad date' }])
 })
+
+test('a plan_weekend call logs its input and row_count = number of pairs (not trains)', async () => {
+  const input = { from: 'NYP', to: 'PHL', outDate: '2026-09-18', returnDate: '2026-09-20', departAfter: '17:00' }
+  const anthropic = fakeAnthropic([toolUseFor('plan_weekend', input), textResponse('Leave 6:05 PM, back 8:00 PM Sunday.')])
+  const hms = (h, m) => h * 3600 + m * 60
+  const fri = { sunday: 0, monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 1, saturday: 0 }
+  const sun = { ...fri, friday: 0, sunday: 1 }
+  const base = { can_board: true, can_alight: true, start_date: 20260906, end_date: 20270906 }
+  const legs = {
+    // two outbound trains, three returns: 2 pairs (one per outbound), not 6
+    'NYP>PHL': [
+      { train: '1135', route: 'Northeast Regional', dep_secs: hms(18, 5), arr_secs: hms(19, 32), ...fri, ...base },
+      { train: '1165', route: 'Northeast Regional', dep_secs: hms(20, 1), arr_secs: hms(21, 35), ...fri, ...base },
+    ],
+    'PHL>NYP': [
+      { train: '150', route: 'Northeast Regional', dep_secs: hms(9, 0), arr_secs: hms(10, 30), ...sun, ...base },
+      { train: '158', route: 'Northeast Regional', dep_secs: hms(17, 0), arr_secs: hms(18, 30), ...sun, ...base },
+      { train: '90', route: 'Palmetto', dep_secs: hms(20, 0), arr_secs: hms(21, 30), ...sun, ...base },
+    ],
+  }
+  const stops = [
+    { stop_id: 'NYP', stop_name: 'Ny Moynihan Train Hall At Penn Station', stop_timezone: 'America/New_York' },
+    { stop_id: 'PHL', stop_name: 'Philadelphia', stop_timezone: 'America/New_York' },
+  ]
+  const sql = fakeSql({ stops, legs })
+  const ask = createHandler({ makeClients: () => ({ anthropic, sql }) })
+  await ask({ method: 'POST', body: { question: 'Weekend in Philly?', device_id: 'd', session_id: 's' } }, mockRes())
+
+  const m = rowOf(sql.inserts[0]).metadata
+  assert.deepEqual(m.tool_calls, [{ name: 'plan_weekend', input, row_count: 2 }])
+  // No train rows are stored.
+  assert.ok(!JSON.stringify(m).includes('Palmetto'))
+})

@@ -117,3 +117,19 @@ test('a correct schedule answer passes noRefusal despite the required holiday ca
   const answer = "The last Thursday train is 1168 at 7:00 PM Eastern. I can't account for holiday schedules, so confirm on amtrak.com."
   assert.equal(scoreCase(c, { answer, toolCalls: [{ name: 'find_trains' }] }).pass, true)
 })
+
+test('PR 4: both weekend cases require plan_weekend; the dated one pins the outbound trains only', () => {
+  const dated = CASES.find((c) => c.id === 'weekend-friday-evening-philadelphia-date')
+  const generic = CASES.find((c) => c.id === 'weekend-generic-philadelphia')
+  assert.equal(dated.checks.toolCalled, 'plan_weekend')
+  assert.equal(generic.checks.toolCalled, 'plan_weekend')
+  assert.equal(generic.checks.noRefusal, true)
+
+  const calls = [{ name: 'plan_weekend' }]
+  const good = 'Take the 7:10 PM Northeast Regional 1107 out and come back any time Sunday. Confirm holidays on amtrak.com.'
+  assert.equal(scoreCase(dated, { answer: good, toolCalls: calls }).pass, true)
+  // No outbound train named: fails.
+  assert.equal(scoreCase(dated, { answer: 'Several trains run on Sunday.', toolCalls: calls }).pass, false)
+  // Right answer but from the wrong tool: fails.
+  assert.equal(scoreCase(dated, { answer: good, toolCalls: [{ name: 'find_trains' }] }).pass, false)
+})

@@ -414,8 +414,8 @@ export const CASES = [
   //
   // THESE CASES ARE EXPECTED TO FAIL AT BASELINE. They are written with the
   // checks they should pass AFTER the schedule tools exist (PR 3: find_trains;
-  // PR 4: plan_weekend). Today search_trains returns only names, so the model
-  // declines and has no schedule data to quote. The baseline failure of this
+  // PR 4: plan_weekend). At the v1 baseline search_trains returned only names,
+  // so the model declined and had no schedule data to quote. The baseline failure of this
   // whole category, and its later flip to passing, is the before/after story.
   // Do NOT "fix" a failing schedule case by loosening it; fix the tools.
   //
@@ -656,9 +656,11 @@ export const CASES = [
     // NER 65 23:23. (Anything earlier, e.g. Acela 2155 at 17:00 or NER 1129
     // at 17:03, is before 6pm.) NER 1169 is stored at 24:20 (arr 25:45): that
     // is 12:20am Saturday, so it is NOT a Friday-evening train and is left out
-    // of the accepted list on purpose. The return PHL -> NYP on Sun 2026-11-01 has
-    // dozens of departures (5:15 through 23:08), so only the outbound is pinned.
-    // plan_weekend is the PR 4 tool, so this keeps failing until then.
+    // of the accepted list on purpose. NER 65 (23:23, arrives 12:51 AM Saturday)
+    // is a real Friday train too, but "65" is too short a string to match on.
+    //
+    // The return is deliberately not pinned: PHL -> NYP on Sun 2026-11-01 has 36
+    // departures (3:25 through 23:08) and which one the model quotes varies.
     checks: {
       noRefusal: true,
       anyOfTimes: [
@@ -678,7 +680,7 @@ export const CASES = [
     question: 'I want to leave NYC Friday after 5pm and be back Sunday, going to Philadelphia. What trains work?',
     // Weekend pairing with no dates (the natural way people ask). Specific
     // trains depend on which weekend, so this only requires a real answer
-    // that came from the weekend tool (PR 4). NYP <-> PHL has dozens of
+    // that came from the weekend tool (plan_weekend). NYP <-> PHL has dozens of
     // Friday evening and Sunday trains, so a refusal here is never correct.
     checks: {
       noRefusal: true,
