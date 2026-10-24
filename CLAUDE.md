@@ -202,6 +202,10 @@ Deliberate choices:
    comment in `sql/001_events_table.sql`. Leave it or drop it, but don't mistake
    it for active protection.
 3. ~~`/api/ask` doesn't log~~ — done: see `event_type = 'ask'` above.
+4. **Durations across a DST change.** `schedule.js` computes durations from the
+   feed's wall-clock times, so a train running through 1-2 AM on a DST-change night
+   (e.g. 2026-11-01) can show a duration that is 1h off. (`planWeekend`'s hours at the
+   destination do account for the clock change.)
 
 ### Migrating another project to Neon (recipe that worked)
 
@@ -265,7 +269,8 @@ and `today` always comes from the real clock, never from the model.
 - **The cap:** each outbound train is paired only with its *latest* working return
   (the most time at the destination), then at most `limit` pairs are kept (default 10,
   model max 20; the ones with the most hours, shown in departure order). The
-  `outbound`/`inbound` lists show at most 12 trains each; `summary` has the full counts.
+  `outbound`/`inbound` lists show at most 12 trains each; `summary` has the full counts
+  plus `earliestReturn` / `latestReturn` (from the full inbound list). A stay must be > 0 min.
 - `ambiguous`/`not_found` stations, `outsideFeed`, `unavailable` and the notes are
   passed through from `findDirectTrains`.
 

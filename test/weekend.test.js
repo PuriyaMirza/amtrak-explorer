@@ -138,6 +138,66 @@ test('when the clocks go back between the two days, hours are real elapsed time 
   assert.ok(!plain.notes.some((n) => /clocks change/.test(n)))
 })
 
+// The clocks go back at 2 AM on Sun 2026-11-01, so the offset has to be looked
+// up at the actual arrival / departure MOMENT, not once per date: 12:30 AM that
+// Sunday is still summer time (EDT) and 8 AM is winter time (EST).
+const dstPair = async (outDep, outArr, backDep) => {
+  const legs = {
+    'NYP>PHL': [leg('O', 'Northeast Regional', outDep, outArr, only('saturday'))],
+    'PHL>NYP': [leg('R', 'Northeast Regional', backDep, backDep + hms(1, 30), only('sunday'))],
+  }
+  const { r } = await run({ outDate: '2026-10-31', returnDate: '2026-11-01' }, { legs })
+  return r
+}
+
+test('DST night: arrive 12:51 AM Nov 1 (still EDT), return 11:08 PM Nov 1 (EST) = 23.3 h', async () => {
+  const r = await dstPair(hms(23, 0), hms(24, 51), hms(23, 8))
+  assert.equal(r.pairs[0].out.arriveDayOffset, 1)
+  assert.equal(r.pairs[0].hoursAtDestination, 23.3)
+  assert.ok(r.notes.some((n) => /clocks change/.test(n)))
+})
+
+test('DST night: arrive 8 PM Oct 31, return 12:30 AM Nov 1 (both still EDT) = 4.5 h, no hour added', async () => {
+  const r = await dstPair(hms(18, 0), hms(20, 0), hms(0, 30))
+  assert.equal(r.pairs[0].hoursAtDestination, 4.5)
+  assert.ok(!r.notes.some((n) => /clocks change/.test(n)))
+})
+
+test('DST night: arrive 12:30 AM Nov 1 (EDT), return 8:00 AM Nov 1 (EST) = 8.5 h', async () => {
+  const r = await dstPair(hms(22, 0), hms(24, 30), hms(8, 0))
+  assert.equal(r.pairs[0].hoursAtDestination, 8.5)
+  assert.ok(r.notes.some((n) => /clocks change/.test(n)))
+})
+
+test('a zero-minute stay is not a trip: the return must leave AFTER the outbound arrives', async () => {
+  // Same day: arrives 10:00 AM, a return leaves at exactly 10:00 AM (0 minutes) and another at 10:01.
+  const legs = {
+    'NYP>PHL': [leg('S1', 'Northeast Regional', hms(8, 0), hms(10, 0), only('saturday'))],
+    'PHL>NYP': [leg('R0', 'Northeast Regional', hms(10, 0), hms(11, 30), only('saturday'))],
+  }
+  const zero = (await run({ outDate: '2026-09-19', returnDate: '2026-09-19' }, { legs })).r
+  assert.deepEqual(zero.pairs, [])
+  const withNext = {
+    ...legs,
+    'PHL>NYP': [...legs['PHL>NYP'], leg('R1', 'Northeast Regional', hms(10, 1), hms(11, 30), only('saturday'))],
+  }
+  const ok = (await run({ outDate: '2026-09-19', returnDate: '2026-09-19' }, { legs: withNext })).r
+  assert.deepEqual(ok.pairs.map((p) => [p.back.train, p.hoursAtDestination]), [['R1', 0]])
+})
+
+test('summary has the earliest and latest return from the full inbound list, even past the list cut', async () => {
+  const backs = Array.from({ length: 15 }, (_, i) => leg(`R${i}`, 'Northeast Regional', hms(5, i * 30), hms(7, i * 30), only('sunday')))
+  const { r } = await run(FRI_SUN, { legs: { 'NYP>PHL': NYP_PHL, 'PHL>NYP': backs } })
+  assert.equal(r.inbound.length, TRAIN_LIST_LIMIT)
+  assert.equal(r.summary.earliestReturn.train, 'R0')
+  assert.equal(r.summary.latestReturn.train, 'R14') // not in the 12 listed
+  assert.ok(!r.inbound.some((t) => t.train === 'R14'))
+  // No return trains: both are null.
+  const none = (await run(FRI_SUN, { legs: { 'NYP>PHL': NYP_PHL, 'PHL>NYP': [] } })).r
+  assert.equal(none.summary.earliestReturn, null)
+  assert.equal(none.summary.latestReturn, null)
+})
+
 // ---------------------------------------------------------------------------
 // Dates
 // ---------------------------------------------------------------------------

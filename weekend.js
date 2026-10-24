@@ -19,8 +19,9 @@
 // outbound date: a train that leaves at 11:23 PM Friday and arrives at 12:51 AM
 // has arriveDayOffset = 1, so you only get there on Saturday, and the time you
 // have at the destination shrinks by those hours. A pair is dropped if the hours
-// come out below `minHoursAtDestination` (default 0: you can't catch a train
-// that leaves before you've arrived).
+// come out below `minHoursAtDestination` (default 0, which still means the
+// stay must be longer than zero: you can't catch a train that leaves before (or
+// the minute) you've arrived).
 //
 // WHY THE RESULT IS CAPPED
 // Every outbound could pair with every return (10 x 25 = 250 pairs), and the
@@ -51,24 +52,32 @@ export const TRAIN_LIST_LIMIT = 12
 const MINUTES_PER_DAY = 1440
 const MS_PER_DAY = 86400 * 1000
 
-// Eastern's offset from UTC in minutes on a given date (-240 in summer, -300 in
-// winter). Used so "hours at the destination" stays right when the clocks change
-// between the two days (e.g. Fri 2026-10-30 -> Sun 2026-11-01 is the weekend the
-// clocks go back, so the real elapsed time is one hour more than the clock
-// difference). Noon UTC+5h is safely the same calendar day in New York.
-// Remembered per date: pairing calls it for every outbound x return combination,
-// and building the formatter each time would be needlessly slow.
+// Eastern's offset from UTC in minutes at a wall-clock moment: `minuteOfDay`
+// minutes after midnight on `isoDate` (-240 in summer, -300 in winter). Used so
+// "hours at the destination" stays right when the clocks change between the two
+// moments (e.g. Fri 2026-10-30 -> Sun 2026-11-01 is the weekend the clocks go
+// back, so the real elapsed time is one hour more than the clock difference).
+//
+// It must be asked about the actual MOMENT, not just the date: the change
+// happens at 2 AM, so 12:30 AM on 2026-11-01 is still summer time and 8 AM
+// that day is winter time. We build the UTC instant by assuming winter time
+// (UTC = wall + 5h) and ask Intl what Eastern's offset is at that instant. For
+// the ambiguous 1:00-1:59 AM hour that comes out as winter time.
+//
+// Remembered per moment: pairing calls it for every outbound x return
+// combination, and building the formatter each time would be needlessly slow.
 const offsetCache = new Map()
-function easternOffsetMinutes(isoDate) {
-  if (offsetCache.has(isoDate)) return offsetCache.get(isoDate)
-  const minutes = computeEasternOffsetMinutes(isoDate)
-  offsetCache.set(isoDate, minutes)
+function easternOffsetMinutes(isoDate, minuteOfDay) {
+  const key = `${isoDate}|${minuteOfDay}`
+  if (offsetCache.has(key)) return offsetCache.get(key)
+  const minutes = computeEasternOffsetMinutes(isoDate, minuteOfDay)
+  offsetCache.set(key, minutes)
   return minutes
 }
 
-function computeEasternOffsetMinutes(isoDate) {
+function computeEasternOffsetMinutes(isoDate, minuteOfDay) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: FEED_TIMEZONE, timeZoneName: 'shortOffset' })
-    .formatToParts(new Date(`${isoDate}T17:00:00Z`))
+    .formatToParts(new Date(Date.parse(`${isoDate}T00:00:00Z`) + (minuteOfDay + 300) * 60000))
   const name = parts.find((p) => p.type === 'timeZoneName')?.value ?? ''
   const m = /GMT([+-])(\d+)(?::(\d+))?/.exec(name)
   if (!m) return 0
@@ -150,7 +159,7 @@ const slim = (t) => ({
 //     unavailable, outsideFeed, notes }
 // where outbound/inbound are slim trains (first TRAIN_LIST_LIMIT by departure) and
 //   pairs   = [{ out, back, hoursAtDestination }] sorted by outbound departure
-//   summary = { outboundCount, inboundCount, pairCount, latestReturnForEarliestOut, maxHoursAtDestination }
+//   summary = { outboundCount, inboundCount, earliestReturn, latestReturn, pairCount, latestReturnForEarliestOut, maxHoursAtDestination }
 // `from`/`to` are the resolved stations (status 'ambiguous' lists candidates).
 export async function planWeekend(sql, options) {
   const o = normalizeOptions(options)
@@ -187,7 +196,7 @@ export async function planWeekend(sql, options) {
     inbound: [],
     pairs: [],
     summary: {
-      outboundCount: 0, inboundCount: 0, pairCount: 0, latestReturnForEarliestOut: null, maxHoursAtDestination: null,
+      outboundCount: 0, inboundCount: 0, earliestReturn: null, latestReturn: null, pairCount: 0, latestReturnForEarliestOut: null, maxHoursAtDestination: null,
     },
     unavailable: [],
     outsideFeed: out.outsideFeed,
@@ -221,6 +230,10 @@ export async function planWeekend(sql, options) {
   result.inbound = back.trains.slice(0, TRAIN_LIST_LIMIT).map(slim)
   result.summary.outboundCount = out.trains.length
   result.summary.inboundCount = back.trains.length
+  // From the FULL return list (before any cap), so "earliest train back Sunday"
+  // and "last train back" are explicit and don't depend on pairs or the list cut.
+  result.summary.earliestReturn = back.trains.length > 0 ? slim(back.trains[0]) : null
+  result.summary.latestReturn = back.trains.length > 0 ? slim(back.trains.at(-1)) : null
   if (out.trains.length > TRAIN_LIST_LIMIT || back.trains.length > TRAIN_LIST_LIMIT) {
     notes.push(
       `Trains are listed for at most ${TRAIN_LIST_LIMIT} per direction (by departure time); ` +
@@ -231,12 +244,13 @@ export async function planWeekend(sql, options) {
   // ---- pairing ----
   // Real elapsed minutes between an outbound arrival and a return departure.
   const dayGap = Math.round((retD.getTime() - outD.getTime()) / MS_PER_DAY)
-  const returnOffset = easternOffsetMinutes(returnDate)
   let clockChange = false
   const stayMinutes = (outTrain, backTrain) => {
     const arrive = outTrain.arriveDayOffset * MINUTES_PER_DAY + clockLabelToMinutes(outTrain.arrive)
     const depart = clockLabelToMinutes(backTrain.depart)
-    const arriveOffset = easternOffsetMinutes(toIso(addDays(outD, outTrain.arriveDayOffset)))
+    // Offsets at the real arrival moment and the real departure moment.
+    const arriveOffset = easternOffsetMinutes(toIso(addDays(outD, outTrain.arriveDayOffset)), clockLabelToMinutes(outTrain.arrive))
+    const returnOffset = easternOffsetMinutes(returnDate, depart)
     if (arriveOffset !== returnOffset) clockChange = true
     return dayGap * MINUTES_PER_DAY + depart - arrive + arriveOffset - returnOffset
   }
@@ -247,7 +261,8 @@ export async function planWeekend(sql, options) {
     let best = null
     for (const backTrain of back.trains) {
       const minutes = stayMinutes(outTrain, backTrain)
-      if (minutes < minMinutes) continue
+      // A zero-minute stay isn't a trip, so the stay must be positive even when minHours is 0.
+      if (minutes <= 0 || minutes < minMinutes) continue
       // Latest-departing return = most minutes. Ties keep the first train listed.
       if (best === null || minutes > best.minutes) best = { backTrain, minutes }
     }

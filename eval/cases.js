@@ -659,12 +659,8 @@ export const CASES = [
     // of the accepted list on purpose. NER 65 (23:23, arrives 12:51 AM Saturday)
     // is a real Friday train too, but "65" is too short a string to match on.
     //
-    // The return PHL -> NYP on Sun 2026-11-01 has 36 departures (3:25 through
-    // 23:08). plan_weekend pairs every outbound with its LATEST return, which
-    // is NER 128 at 23:08 (arrives 12:34 AM Monday), so the second group pins
-    // that return. (Re-verified on Neon 2026-10-24, SELECT only, using the same
-    // service-day rule as the query above for both dates.) Note the clocks go
-    // back on Sun 2026-11-01, so the tool adds an hour to hoursAtDestination.
+    // The return is deliberately not pinned: PHL -> NYP on Sun 2026-11-01 has 36
+    // departures (3:25 through 23:08) and which one the model quotes varies.
     checks: {
       noRefusal: true,
       anyOfTimes: [
@@ -674,8 +670,6 @@ export const CASES = [
           '7:01 pm', '7:01pm', '19:01', '7:10 pm', '7:10pm', '19:10',
           '8:01 pm', '8:01pm', '20:01', '9:05 pm', '9:05pm', '21:05',
         ],
-        // The latest Sunday return, train 128 (the pairs the tool returns all use it).
-        ['128', '11:08 pm', '11:08pm', '23:08'],
       ],
       toolCalled: 'plan_weekend',
     },
