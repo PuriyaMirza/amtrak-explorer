@@ -36,7 +36,7 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 2. **Decided 2026-10-24: (a) default origin, plus a station picker.** Default NYP; a
    type-to-search "Your station: …" picker in the top right sends `home_station`. PR A
    (server, prompt v4, eval case `no-origin-uses-home-station`) then PR B (picker UI).
-   Run `npm run eval` after PR A merges to record the v4 row. Background: with no origin given, the model asks
+   Both shipped (#12, then the picker); v4 eval: 41/41. Background: with no origin given, the model asks
    "where are you leaving from?", and each question is independent, so the follow-up
    had to restate everything. Options were:
    - (a) **Default origin = NYP** when none is given. The app's home base, a one-line
@@ -50,8 +50,7 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 ## Still open (from CLAUDE.md, carried over)
 
 - **Inert RLS on `events`:** decide drop vs keep (zero policies; functions connect as owner).
-- **Planning repo `amtrak-trip-planner`:** draft PR #1 (old M0 spike) to close or merge.
-  That repo is reference only now.
+- ~~**Planning repo `amtrak-trip-planner`**~~ Decided 2026-10-24: close PR #1, archive the repo.
 - **Write-up #1 (roadmap D), Puriya's to write.** Raw material:
   - `eval/RESULTS.md`: 27 → 38 → 40.
   - The Cardinal baseline answer: "Yes" to an impossible WAS→NYP trip, an ungrounded

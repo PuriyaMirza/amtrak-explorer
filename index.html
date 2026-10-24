@@ -1,10 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>Amtrak Explorer</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Where questions start when they don't name a station. Remembered in
+       this browser; the server only trusts the stop_id after checking it. -->
+  <div id="home-station" class="home-station">
+    <span class="meta">Your station:</span>
+    <button id="home-station-button" type="button" aria-expanded="false" aria-controls="home-station-picker"></button>
+    <div id="home-station-picker" class="home-station-picker" hidden>
+      <input id="home-station-input" type="text" placeholder="Type a station name…" autocomplete="off" aria-label="Search for your station" />
+      <ul id="home-station-results"></ul>
+    </div>
+  </div>
+
   <h1>Amtrak Explorer</h1>
   <input id="q" type="text" placeholder="Search stations and routes…" autocomplete="off" />
   <div id="results"></div>
@@ -19,6 +31,97 @@
   <script type="module">
     import { logEvent, deviceId, sessionId } from './events.js'
     import { formatToolCall } from './tool-labels.js'
+    import { loadHomeStation, saveHomeStation, stationFromSearchRow } from './home-station.js'
+
+    // ---- Home station picker ----
+    // Click the station name, type, pick a result. Reuses /api/search (the
+    // same query as the search box), keeping stations only.
+    const homeButton = document.getElementById('home-station-button')
+    const homePicker = document.getElementById('home-station-picker')
+    const homeInput = document.getElementById('home-station-input')
+    const homeResults = document.getElementById('home-station-results')
+    const HOME_RESULT_LIMIT = 8
+
+    let homeStation = loadHomeStation(localStorage)
+    homeButton.textContent = homeStation.name
+
+    function setPickerOpen(open) {
+      homePicker.hidden = !open
+      homeButton.setAttribute('aria-expanded', String(open))
+      if (open) {
+        homeInput.value = ''
+        homeResults.replaceChildren()
+        homeInput.focus()
+      }
+    }
+
+    // One <li> per station, built with textContent rather than innerHTML, so
+    // a station name can only ever be shown as text.
+    function homeStatus(text) {
+      const li = document.createElement('li')
+      li.className = 'status'
+      li.textContent = text
+      homeResults.replaceChildren(li)
+    }
+
+    function renderHomeResults(stations) {
+      if (!stations.length) return homeStatus('No matching stations.')
+      homeResults.replaceChildren(...stations.slice(0, HOME_RESULT_LIMIT).map((row) => {
+        const li = document.createElement('li')
+        li.className = 'clickable'
+        li.tabIndex = 0
+        li.textContent = stationFromSearchRow(row).name + ' '
+        const meta = document.createElement('span')
+        meta.className = 'meta'
+        meta.textContent = row.stop_id
+        li.append(meta)
+        const choose = () => {
+          homeStation = saveHomeStation(localStorage, stationFromSearchRow(row))
+          homeButton.textContent = homeStation.name
+          setPickerOpen(false)
+          homeButton.focus()
+          logEvent('home_station', {
+            target_type: 'station',
+            target_id: homeStation.stop_id,
+            target_label: homeStation.name,
+          })
+        }
+        li.addEventListener('click', choose)
+        li.addEventListener('keydown', (e) => { if (e.key === 'Enter') choose() })
+        return li
+      }))
+    }
+
+    homeButton.addEventListener('click', () => setPickerOpen(homePicker.hidden))
+
+    let homeTimer
+    homeInput.addEventListener('input', () => {
+      clearTimeout(homeTimer)
+      const term = homeInput.value.trim()
+      if (term.length < 2) return homeResults.replaceChildren()
+      homeTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(term)}`)
+          if (!res.ok) throw new Error(`Search failed (${res.status})`)
+          const data = await res.json()
+          // Ignore a reply that arrives after the person kept typing.
+          if (homeInput.value.trim() === term) renderHomeResults(data.stations)
+        } catch (err) {
+          homeStatus(`Error: ${err.message}`)
+        }
+      }, 250)
+    })
+
+    // Escape or a click elsewhere closes the picker without changing anything.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !homePicker.hidden) {
+        setPickerOpen(false)
+        homeButton.focus()
+      }
+    })
+    document.addEventListener('click', (e) => {
+      if (!homePicker.hidden && !document.getElementById('home-station').contains(e.target)) setPickerOpen(false)
+    })
 
     const input = document.getElementById('q')
     const results = document.getElementById('results')
@@ -143,7 +246,10 @@
           headers: { 'Content-Type': 'application/json' },
           // Same ids events.js sends to /api/log, so the server can tie an ask to
           // a browser and a visit.
-          body: JSON.stringify({ question, device_id: deviceId, session_id: sessionId }),
+          // home_station: only the stop_id; the server checks it against `stops`.
+          body: JSON.stringify({
+            question, device_id: deviceId, session_id: sessionId, home_station: homeStation.stop_id,
+          }),
         })
         const data = await res.json()
 

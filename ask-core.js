@@ -11,6 +11,7 @@
 import { searchTrains } from './search.js'
 import { findDirectTrains, findStationById, todayInNewYork, WEEKDAYS } from './schedule.js'
 import { planWeekend, DEFAULT_PAIR_LIMIT } from './weekend.js'
+import { DEFAULT_HOME_STATION, stationName } from './home-station.js'
 
 // Pinned on purpose: the app and the evals must use the same model, otherwise
 // an eval pass rate says nothing about what users actually get.
@@ -21,11 +22,10 @@ export const MODEL = 'claude-sonnet-5-5'
 // run, so a change in pass rate can be tied to a change in the prompt.
 export const PROMPT_VERSION = 'v4'
 
-// Where a question starts when the person doesn't say. The browser can send
-// another stop_id (the station picker); resolveHomeStation() checks it.
-// The name here is ours, not the feed's ("Ny Moynihan Train Hall At Penn
-// Station"), because it is what the model will repeat back to people.
-export const DEFAULT_HOME_STATION = { stop_id: 'NYP', name: 'New York Penn Station' }
+// Where a question starts when the person doesn't say (New York Penn). It
+// lives in home-station.js, shared with the browser's station picker; the
+// browser can send another stop_id, which resolveHomeStation() checks.
+export { DEFAULT_HOME_STATION }
 
 export const RESULT_LIMIT = 10
 // Most trains one find_trains result may carry back to the model. A busy pair
@@ -251,7 +251,8 @@ export async function resolveHomeStation(sql, requestedId) {
     return DEFAULT_HOME_STATION
   }
   try {
-    return (await findStationById(sql, requestedId)) ?? DEFAULT_HOME_STATION
+    const station = await findStationById(sql, requestedId)
+    return station ? { stop_id: station.stop_id, name: stationName(station.stop_id, station.name) } : DEFAULT_HOME_STATION
   } catch {
     return DEFAULT_HOME_STATION
   }

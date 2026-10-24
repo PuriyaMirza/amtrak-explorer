@@ -70,7 +70,7 @@ test those on the deployed site, or use `vercel dev`.
 
 ### Files
 ```
-index.html          search UI + natural-language ask UI; no DB client
+index.html          search UI + natural-language ask UI + "Your station" picker; no DB client
 search.js           searchTrains(sql, {query, limit}) — SINGLE SOURCE OF TRUTH
 schedule.js         findDirectTrains(sql, {from, to, date|weekday, departAfter,
                     departBefore, route, limit}) — direct trains, times, durations.
@@ -81,6 +81,8 @@ weekend.js          planWeekend(sql, {from, to, outDate|outDay, returnDate|retur
                     round trips: pairs outbound + return trains (built on
                     findDirectTrains, no SQL of its own) and reports hoursAtDestination.
                     Plain data, reusable by a future browse "weekend finder"
+home-station.js     DEFAULT_HOME_STATION (NYP) + load/saveHomeStation(localStorage) for
+                    the picker; shared by browser and ask-core.js (pure; unit-tested)
 tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown
                     under ask answers (pure; unit-tested)
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
@@ -188,6 +190,8 @@ Deliberate choices:
 - `metadata jsonb` — escape hatch so new event types don't need a migration
 - **No enum check on `event_type` in the table.** Validation lives in
   `api/log.js` instead, as a whitelist. Easy to extend, still a real gate.
+  Browser types: `search`, `click`, `home_station` (picker change; `target_id` =
+  stop_id, `target_label` = name).
 - `event-store.js` lists insertable columns **explicitly** so a caller can't write
   to unintended columns. Both `api/log.js` and the ask logger go through it.
 - **`event_type = 'ask'`** — one row per `/api/ask` request (success, or an error
@@ -461,6 +465,8 @@ blocked on having enough data to say anything honest.
   `eval/score.js`: plural refusal phrases, scope-disclaimer stripping). Rows from different
   scorer versions are not directly comparable (see the "Scorer changes" note in `eval/RESULTS.md`).
 - **Scorer v2 re-run** (2026-10-24, prompt v3, scorer 2): **40/40 (100%)**, schedule 13/13.
+- **Prompt v4** (2026-10-24, home station, scorer 2): **41/41 (100%)**, schedule 14/14
+  (new case `no-origin-uses-home-station`).
 
 ---
 
@@ -474,8 +480,8 @@ the live test (the "Searched for: undefined" UI bug; the default-origin vs conve
 - [x] **(b) Supabase `amtrak-explorer` project:** deleted 2026-10-24 after the 13 snippets were
       saved to `sql/snippets_from_supabase.sql`. (`bike-forecast` still lives on Supabase; don't touch it.)
 - [ ] **(c) Inert RLS on `events`.** Decide: drop it or keep it (see Known cleanup items).
-- [ ] **(d) The planning repo `amtrak-trip-planner`** (static-JSON design, now reference
-      only) has an unmerged draft PR #1 (the M0 spike). Close or merge it.
+- [x] **(d) The planning repo `amtrak-trip-planner`:** decided 2026-10-24: close draft PR #1
+      and archive the repo (Puriya, on GitHub). Nothing here depends on it.
 - [ ] **(e) Write-up material:** in the baseline run, the model said "Yes" to an impossible
       WAS -> NYP trip on the Cardinal, using only station lists (the Cardinal can't be
       boarded at WAS; see the `cardinal-no-boarding-was-nyc` case and `unavailable` in
