@@ -1,6 +1,6 @@
 # PRD: amtrak-explorer, next phase
 
-**Status:** approved by Puriya, 2026-10-23 · **Owner:** Puriya · **Built by:** Claude (orchestrator) + developer/QA agents
+**Status:** approved by Puriya, 2026-10-23. PRs 1-4 shipped 2026-10-23/24 (UTC merge dates; #3-#6); PR 5 (docs, #7) opened 2026-10-24. Next phase: §7. · **Owner:** Puriya · **Built by:** Claude (orchestrator) + developer/QA agents
 
 ## 1. Problem
 
@@ -52,8 +52,10 @@ Each PR is small, keeps `search.js`'s dependency-injection pattern (query module
 as a parameter; endpoints have no query logic of their own), and ships tests.
 
 ### PR 1: Eval harness you can actually run
+**Shipped: #3, 2026-10-23.** Baseline run (prompt v1) recorded in `eval/RESULTS.md`: 27/40, schedule 0/13.
+
 - `eval/run.js` gains a **local mode** (default when `DATABASE_URL` + `ANTHROPIC_API_KEY`
-  are set, e.g. after `vercel env pull`). It calls the `api/ask.js` handler in-process, with
+  are set, e.g. after `vercel env pull`). It calls `askQuestion` (ask-core.js) in-process, with
   no HTTP and no SSO. Remote mode (`ASK_URL`) stays.
 - Extract the ask logic into `ask-core.js` (`askQuestion({ anthropic, sql, question })`) so the
   endpoint, the eval runner and the tests share one implementation.
@@ -69,6 +71,8 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
 - 500-char question cap in `/api/ask` (400 response).
 
 ### PR 2: Ask-box logging and cleanup
+**Shipped: #4, 2026-10-23.**
+
 - Every `/api/ask` call inserts one `events` row with `event_type = 'ask'`: `query_text` =
   question, and `metadata` = answer, tool calls (name, input, row count), rounds, latency_ms,
   input/output tokens, model, prompt_version, error if any. The insert happens server-side;
@@ -78,6 +82,10 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
   document the inert RLS policies (no DB change).
 
 ### PR 3: Schedule tool (times, durations, weekdays)
+**Shipped: #5, 2026-10-23** (prompt v2). Declared deviations from the spec below:
+- A `weekday` with no `date` means the *next* such date (today counts), not "any day with that weekday flag", so one real timetable is used instead of mixing calendar windows. Days are physical days: a trip's service day is the requested date minus whole days of boarding offset.
+- Added a `route` filter and a `summary` (earliest, latest, fastest over *all* trains), so a capped list (12 default, 20 max) still answers "first/last/fastest" correctly.
+
 - New query module `schedule.js`: `findDirectTrains(sql, { from, to, date?, weekday?, departAfter?, departBefore? })`.
   - Matches station by id or name and returns direct trips only: same `trip_id`, `from`
     stop before `to` stop, pickup allowed at `from` and drop-off allowed at `to`.
@@ -94,11 +102,17 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
 - Tests: SQL logic against fixture rows, including an overnight trip; tool wiring with mocked Anthropic.
 
 ### PR 4: Weekend trip tool
+**Shipped: #6, 2026-10-24 (UTC merge)** (prompt v3). Declared deviations from the spec below:
+- **Pair-cap rule:** each outbound train is paired only with its *latest* working return, then at most `limit` pairs are kept (default 10, max 20), rather than every outbound x return combination.
+- **DST:** `hoursAtDestination` is real elapsed time (clock changes between the two days are accounted for, with a note), not wall-clock difference. `findDirectTrains` durations are still wall-clock and can be 1h off through the DST hour (CLAUDE.md, Known limitations).
+
 - `planWeekend(sql, { from, to, outDay, returnDay, ... })`: pairs outbound and return direct
   trains and reports hours at destination (overnight outbound reduces it). Defaults to Fri → Sun.
 - Exposed as tool `plan_weekend`; weekend eval cases.
 
 ### PR 5: Docs
+**Shipped: #7** (this PR; docs only, no code changes).
+
 - Update `CLAUDE.md` (files, tools, roadmap ticks, how to run evals locally) and the README.
 
 ## 5. Acceptance criteria (phase)

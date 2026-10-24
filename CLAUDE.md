@@ -106,6 +106,7 @@ sql/                events table, reconstructed from the live DB (2026-10-23)
 
 ```bash
 vercel env pull .env.local   # once; DATABASE_URL + ANTHROPIC_API_KEY, git-ignored
+                             # missing keys? try: npx vercel env pull .env.local --environment=production
 npm run eval                 # local mode: calls askQuestion in-process, appends a row to eval/RESULTS.md
 npm run eval -- --no-record  # same, without writing a row
 ASK_URL=http://localhost:3000/api/ask npm run eval   # remote mode (vercel dev); the deployed site is behind SSO
@@ -122,7 +123,8 @@ any case failed (expected at the v1 baseline, where the schedule cases failed). 
 2 = setup problem (missing/empty env vars) and 3 = every request errored (bad
 key, spend limit, SSO), in which case nothing is written to RESULTS.md.
 `vercel env pull` writes empty values for Sensitive variables; if the runner
-says a variable is EMPTY, paste the real value into `.env.local`. The `schedule` cases failed at the v1 baseline (recorded in
+says a variable is EMPTY, paste the real value into `.env.local` (a Sensitive var can
+also pull as a placeholder, so paste your own key). The `schedule` cases failed at the v1 baseline (recorded in
 RESULTS.md); `find_trains` (prompt v2) and `plan_weekend` (prompt v3) are what should
 make them pass. The two `weekend-*` cases require `plan_weekend`.
 
@@ -202,10 +204,6 @@ Deliberate choices:
    comment in `sql/001_events_table.sql`. Leave it or drop it, but don't mistake
    it for active protection.
 3. ~~`/api/ask` doesn't log~~ — done: see `event_type = 'ask'` above.
-4. **Durations across a DST change.** `schedule.js` computes durations from the
-   feed's wall-clock times, so a train running through 1-2 AM on a DST-change night
-   (e.g. 2026-11-01) can show a duration that is 1h off. (`planWeekend`'s hours at the
-   destination do account for the clock change.)
 
 ### Migrating another project to Neon (recipe that worked)
 
@@ -244,15 +242,45 @@ POST `{ question }` → `{ answer, toolCalls }`
    only fills in parameters; it never writes SQL)
 4. Real rows go back to Claude, which writes the final answer
 
-Usually two round trips to Claude; up to `MAX_ROUNDS` (4) if it chains tools.
+Usually two round trips to Claude (ask, then answer). The loop runs up to
+`MAX_ROUNDS` (4) times if the model chains tools; if it is still asking for tools
+after round 4 there is no final text and the caller gets a fixed "try rephrasing"
+fallback answer. A tool that throws (bad input, DB error) is not fatal: the error
+text goes back to the model as the tool result so it can correct itself.
 
-The system prompt (v3) says: state times/durations only if a tool returned them,
-say times are Eastern, and add a "holidays aren't modelled, confirm on amtrak.com"
-caveat to schedule answers. Today's date (New York) is appended per request so
-"next Thursday" can be turned into a date. `find_trains` results are capped at
-12 trains by default (20 max); its `summary` still covers all trains.
-`plan_weekend` has the same shape of guard: inputs are whitelisted in `runTool`
-and `today` always comes from the real clock, never from the model.
+**Guards in `runTool` (ask-core.js)**
+- **Input whitelisting.** `find_trains` and `plan_weekend` inputs are copied field by
+  field, never spread (`{ ...input }`), so the model can't pass fields we didn't offer.
+- **`today` is injected.** `today` always comes from the real clock (New York time),
+  never from the model, so the model can't choose what "today" is. The same date is
+  appended to the system prompt per request (`systemPromptFor`) so "next Thursday"
+  can be turned into a date.
+- **Row caps.** `find_trains` returns 12 trains by default (20 max); its `summary`
+  still covers all trains. `plan_weekend` caps pairs (see below).
+- The model supplies parameters only; every query is a fixed one in `search.js` /
+  `schedule.js`. `weekend.js` has no SQL at all.
+
+**Model and prompt version**
+- `MODEL` is pinned (`claude-sonnet-5-5`), shared by the app and the evals, so an eval
+  pass rate describes what users actually get.
+- `PROMPT_VERSION` is written next to every eval run in `eval/RESULTS.md`. Bump it
+  whenever the system prompt or tools change in a way that could move the pass rate.
+  - **v1**: baseline, `search_trains` only (the recorded baseline run)
+  - **v2**: adds `find_trains` (PR 3)
+  - **v3**: adds `plan_weekend` (PR 4); current
+
+**System prompt rules (v3)** (if you reword them, update `eval/cases.js`, which looks
+for some of these phrases)
+- Only state stations, routes, train numbers, times and durations that a tool returned;
+  never invent a station, schedule or price.
+- Say times are US Eastern (the feed gives Eastern at every station), and flag it for
+  stations in other time zones. If a train arrives the next day, say so.
+- If the person gave a weekday but no date, **state the resolved date** ("Thursday 2026-10-29").
+- Add one short **holiday caveat** to every schedule answer: holiday schedules are not
+  modelled, confirm on amtrak.com.
+- Use `plan_weekend` for go-and-come-back questions, `find_trains` for one-way.
+- Direct trains only; no fares, live delays, seat availability or booking. Say so rather than guess.
+- Ambiguous station names: say which matched. Plain text only (no markdown). A few sentences.
 
 ### planWeekend (weekend.js)
 
@@ -312,6 +340,27 @@ Answerable (PR 4): round trips ("leave Friday after 6, back Sunday") with hours 
 the destination, via `plan_weekend`.
 Still not answerable: connections, fares, live delays, holidays, scenery, booking.
 
+### Known limitations
+
+Replaces the old "the tool is too thin" problem, which `find_trains` and `plan_weekend` fixed.
+
+- **No holiday data.** The feed has no `calendar_dates`, so holiday schedules (and
+  one-off cancellations) are not modelled. The prompt makes the model say so.
+- **All feed times are Eastern**, even at Chicago/LA stations. The tools report them as
+  given and say "Eastern".
+- **Direct trains only.** No connections; a pair with no single-train service returns
+  nothing.
+- **DST-night durations.** `schedule.js` computes durations from the feed's wall-clock
+  times, so a train running through 1-2 AM on a DST-change night (e.g. 2026-11-01) can
+  show a duration that is 1h off. (`planWeekend`'s hours at the destination do account
+  for the clock change.)
+- **The site is behind Vercel SSO**, so it isn't public, and remote evals against the
+  deployed URL don't work (local mode is the way). Public access is a decision for
+  write-up time (PRD D6).
+- **500-character question cap** in `/api/ask` (400 response), a cheap guardrail.
+- **Calendar window:** the feed covers 2026-09-06 to 2027-09-06; dates outside return
+  `outsideFeed`.
+
 ---
 
 ## SQL learned (snippets saved in Supabase SQL Editor — note: that's the OLD
@@ -350,29 +399,67 @@ blocked on having enough data to say anything honest.
 - [x] **A** — GTFS data loaded, SQL fundamentals, search UI, event logging
 - [x] **B** — AI layer with tool calling, tested live
 - [x] **B.5** — Migrated Supabase → Neon, all DB access through functions
-- [ ] **Next** — A richer tool. `routes_for_station` answering "what trains go
-      through X" via `stop_times → trips → routes`. Without this the AI layer
-      can't answer much, which undercuts the demo.
-- [ ] **C** — Eval harness: 40 hand-written cases spanning easy / ambiguous /
-      adversarial ("train from NYC to Honolulu" — correct answer is a refusal).
-      Score on: stations exist, constraints respected, arrival after departure,
-      correct refusals. A "run all" button. Log date + prompt version + pass
-      rate. Build a named failure taxonomy.
-      **Test case #1 already exists:** "what trains go through Chicago?"
-- [ ] **D** — Write-up #1: eval methodology + failure taxonomy
+- [x] **Next** — A richer tool. Done, and bigger than planned: `find_trains` (PR 3)
+      and `plan_weekend` (PR 4) instead of a single `routes_for_station`.
+      ("What serves X" was already answerable via `search_trains`' `routes` list.)
+- [x] **C** — Eval harness (done except a UI "run all" button, PR 1): 40 cases (easy / ambiguous /
+      adversarial / schedule), deterministic scoring (no LLM judge), prompt version
+      + pass rate logged per run in `eval/RESULTS.md`, named failure taxonomy.
+      - [ ] "Run all" **button**: not built. The CLI (`npm run eval`) is the runner.
+- [ ] **D** — Write-up #1: eval methodology + failure taxonomy. **Next, and it is
+      Puriya's to write** (the build provides the raw material: `eval/RESULTS.md`
+      and the taxonomy). Needs the post-PR-4 eval row first (see Open items).
 - [ ] **E** — Usage analysis, once there's enough data. Frame the write-up as
       "here's the event schema I designed and the questions it answers" rather
       than conclusions from 30 data points — a small sample invites an
       interviewer to attack the sample size instead of the thinking.
+- [ ] **Next phase: browse screen growth** (committed, not yet specced; see
+      `docs/PRD.md` §7). Order and details get decided when this phase ships:
+      - **Filters** on the browse screen: time of day, route
+      - **Map**: station pins from `stops.stop_lat`/`stop_lon`
+      - **Weekend finder**: pick a weekend, see destinations with Fri-out/Sun-back
+        pairs. Reuses `planWeekend` through a **plain `/api/` endpoint** (no AI in the
+        path); `schedule.js` and `weekend.js` return plain data on purpose, so the
+        endpoint is a thin handler like `api/search.js`.
 
 ### Parked ideas
-- **Weather tool** — second tool alongside `search_trains`. Use
+- **Weather tool** — another tool alongside the three above. Use
   `stops.stop_lat`/`stop_lon` (unambiguous; station name strings are not).
   Must use **historical averages**, not forecasts — real forecasts reach only
   ~14 days, and the use case is "a nice weekend in early October."
 - **Richer trip search** — connections (direct-only today; duration, overnight and
   time filters shipped in PR 3).
 - **Migrate `bike-forecast` to Neon too** — still on Supabase. Recipe above.
+
+---
+
+## Eval history
+
+`eval/RESULTS.md` is the run log (its header explains every column and failure type).
+
+- **Baseline** (2026-10-23, prompt v1, local): **27/40 (68%)**. easy 9/9, ambiguous 8/8,
+  adversarial 10/10, **schedule 0/13**. Failure types: wrong-tool 13, wrong-time 12,
+  wrong-refusal 11. This is the "before" number.
+- **Post-PR-4 run: pending.** Puriya runs `npm run eval` locally (prompt v3) and commits
+  the new row. The "after" number for the schedule category isn't recorded until then.
+  Compare rows with the same case count and check which `PROMPT_VERSION` changed.
+
+---
+
+## Open items for the next session
+
+- [ ] **(a) Post-PR-4 eval run.** Puriya runs `npm run eval` locally and commits the new
+      `eval/RESULTS.md` row (needs `.env.local`, see Running evals). Costs a few tens of cents.
+- [ ] **(b) Supabase `amtrak-explorer` project is paused.** Puriya exports the saved SQL
+      snippets (see "SQL learned"), then the project gets deleted. **Confirm first**,
+      never delete without asking. (`bike-forecast` still lives on Supabase; don't touch it.)
+- [ ] **(c) Inert RLS on `events`.** Decide: drop it or keep it (see Known cleanup items).
+- [ ] **(d) The planning repo `amtrak-trip-planner`** (static-JSON design, now reference
+      only) has an unmerged draft PR #1 (the M0 spike). Close or merge it.
+- [ ] **(e) Write-up material:** in the baseline run, the model said "Yes" to an impossible
+      WAS -> NYP trip on the Cardinal, using only station lists (the Cardinal can't be
+      boarded at WAS; see the `cardinal-no-boarding-was-nyc` case and `unavailable` in
+      `find_trains`). A good concrete example of an ungrounded answer that sounds right.
 
 ---
 
