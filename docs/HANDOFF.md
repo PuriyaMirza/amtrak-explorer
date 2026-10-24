@@ -28,7 +28,7 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 
 ## Do first (found in Puriya's live test)
 
-1. **Bug: "Searched for: `undefined`"** under answers. `index.html` (~line 161-163) renders
+1. ~~**Bug: "Searched for: `undefined`"**~~ Fixed: `tool-labels.js` + `test/tool-labels.test.js`. under answers. `index.html` (~line 161-163) renders
    `toolCalls[].query`, which only `search_trains` entries have. `find_trains` /
    `plan_weekend` entries have `name` + `input` instead. Fix: render per tool, e.g.
    "Looked up trains NYP → BOS, Thu 2026-10-29" / "Planned a weekend NYP ⇄ PHL". Small
