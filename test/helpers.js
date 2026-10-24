@@ -79,6 +79,10 @@ export function fakeSql({
         )
         .slice(0, 25)
     }
+    // schedule.js findStationById: exact id only. values = [id].
+    if (text.includes('from stops where upper(stop_id)')) {
+      return stops.filter((r) => r.stop_id.toUpperCase() === values[0].toUpperCase()).slice(0, 1)
+    }
     if (text.includes('from calendar')) return [window]
     // schedule.js: the legs query. values = [fromId, toId].
     if (text.includes('from stop_times a')) return legs[`${values[0]}>${values[1]}`] ?? []

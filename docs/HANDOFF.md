@@ -33,9 +33,12 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
    `plan_weekend` entries have `name` + `input` instead. Fix: render per tool, e.g.
    "Looked up trains NYP → BOS, Thu 2026-10-29" / "Planned a weekend NYP ⇄ PHL". Small
    PR. There are no browser tests, so add a pure formatting function plus a unit test.
-2. **Product decision (ask Puriya, it's his call):** with no origin given, the model asks
+2. **Decided 2026-10-24: (a) default origin, plus a station picker.** Default NYP; a
+   type-to-search "Your station: …" picker in the top right sends `home_station`. PR A
+   (server, prompt v4, eval case `no-origin-uses-home-station`) then PR B (picker UI).
+   Run `npm run eval` after PR A merges to record the v4 row. Background: with no origin given, the model asks
    "where are you leaving from?", and each question is independent, so the follow-up
-   had to restate everything. Options:
+   had to restate everything. Options were:
    - (a) **Default origin = NYP** when none is given. The app's home base, a one-line
      prompt rule; say "from New York Penn" in the answer.
    - (b) **Conversation memory.** Send prior turns to `/api/ask`. More cost and tokens per

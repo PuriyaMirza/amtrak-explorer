@@ -508,6 +508,22 @@ export const CASES = [
     },
   },
   {
+    id: 'no-origin-uses-home-station',
+    category: 'schedule',
+    question: 'When is the first train to Boston next Thursday?',
+    // No departure station given. Since prompt v4 the model must leave from the
+    // home station (New York Penn by default; the eval sends none) and say so,
+    // instead of asking "where are you leaving from?". Times as in
+    // first-train-nyc-boston-any-thursday: 66 at 5:44, or Acela 2190 at 5:27
+    // once it runs (Thursdays from 2026-11-19).
+    checks: {
+      noRefusal: true,
+      anyOfGroups: [['Penn', 'New York', 'NYP']],
+      anyOfTimes: [['5:27', '5:44']],
+      toolCalled: 'find_trains',
+    },
+  },
+  {
     id: 'first-acela-nyc-boston-thursday-date',
     category: 'schedule',
     question: 'When does the first Acela leave New York for Boston on Thursday, October 29, 2026?',

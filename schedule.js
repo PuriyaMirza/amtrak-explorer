@@ -183,6 +183,16 @@ export async function resolveStation(sql, input) {
   return { input: text, status: 'ambiguous', candidates: candidates.slice(0, 10).map(station) }
 }
 
+// One station by its exact stop_id, or null. Stricter than resolveStation on
+// purpose: no aliases, names or substrings. Used for the home station the
+// browser sends, which ends up in the system prompt, so only a real id from
+// our own table is accepted (see resolveHomeStation in ask-core.js).
+export async function findStationById(sql, id) {
+  if (typeof id !== 'string' || !/^[A-Za-z0-9]{1,10}$/.test(id)) return null
+  const rows = await sql`select stop_id, stop_name from stops where upper(stop_id) = upper(${id}) limit 1`
+  return rows[0] ? { stop_id: rows[0].stop_id, name: rows[0].stop_name } : null
+}
+
 // ---------------------------------------------------------------------------
 // The main function
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@
 // importing them (dependency injection). That is what lets a test hand it a
 // fake Anthropic client and a fake `sql` function.
 import { searchTrains } from './search.js'
-import { findDirectTrains, todayInNewYork, WEEKDAYS } from './schedule.js'
+import { findDirectTrains, findStationById, todayInNewYork, WEEKDAYS } from './schedule.js'
 import { planWeekend, DEFAULT_PAIR_LIMIT } from './weekend.js'
 
 // Pinned on purpose: the app and the evals must use the same model, otherwise
@@ -19,7 +19,13 @@ export const MODEL = 'claude-sonnet-5-5'
 // Bump this whenever SYSTEM_PROMPT or the tools change in a way that could
 // move the eval pass rate. It is written into eval/RESULTS.md next to every
 // run, so a change in pass rate can be tied to a change in the prompt.
-export const PROMPT_VERSION = 'v3'
+export const PROMPT_VERSION = 'v4'
+
+// Where a question starts when the person doesn't say. The browser can send
+// another stop_id (the station picker); resolveHomeStation() checks it.
+// The name here is ours, not the feed's ("Ny Moynihan Train Hall At Penn
+// Station"), because it is what the model will repeat back to people.
+export const DEFAULT_HOME_STATION = { stop_id: 'NYP', name: 'New York Penn Station' }
 
 export const RESULT_LIMIT = 10
 // Most trains one find_trains result may carry back to the model. A busy pair
@@ -221,10 +227,34 @@ export const SYSTEM_PROMPT =
 // Thursday" or "this Saturday" can't be turned into a date without one. It is
 // computed per request (not at import time, which on a warm serverless
 // instance could be days old) and in New York time, matching the schedule data.
-export function systemPromptFor(now = new Date()) {
+//
+// The home station is added the same way. It must come from
+// resolveHomeStation(), never straight from the request: this text is
+// instructions to the model, so browser text here would be prompt injection.
+export function systemPromptFor(now = new Date(), home = DEFAULT_HOME_STATION) {
   const iso = todayInNewYork(now)
   const weekday = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()]
-  return `${SYSTEM_PROMPT} Today is ${weekday} ${iso} (US Eastern time).`
+  return (
+    `${SYSTEM_PROMPT} Today is ${weekday} ${iso} (US Eastern time). ` +
+    `The person's home station is ${home.name} (${home.stop_id}). ` +
+    'If a question needs a departure station and they did not name one, leave from the home station ' +
+    `and say so in the answer (for example "from ${home.name}"). If they name a station, use theirs.`
+  )
+}
+
+// Turns the stop_id the browser sent into a station from our own `stops`
+// table, or the default. Only the table's id and name ever reach the prompt;
+// anything else (bad shape, unknown id, a database error) falls back to the
+// default, so a broken picker can't break the ask box.
+export async function resolveHomeStation(sql, requestedId) {
+  if (requestedId == null || requestedId.toUpperCase?.() === DEFAULT_HOME_STATION.stop_id) {
+    return DEFAULT_HOME_STATION
+  }
+  try {
+    return (await findStationById(sql, requestedId)) ?? DEFAULT_HOME_STATION
+  } catch {
+    return DEFAULT_HOME_STATION
+  }
 }
 
 const FALLBACK_ANSWER =
@@ -305,8 +335,11 @@ async function runTool(name, input, sql, now) {
 //              `messages.create` shape)
 //   sql        a Neon `sql` tagged-template function (or a fake)
 //   question   the user's question, already validated by the caller
+//   homeStation  a stop_id from the browser's station picker, unchecked
+//              (resolveHomeStation checks it); omitted means the default
 //   now        the current time; only tests pass this (it fixes "today")
-export async function askQuestion({ anthropic, sql, question, now = new Date() }) {
+export async function askQuestion({ anthropic, sql, question, homeStation, now = new Date() }) {
+  const home = await resolveHomeStation(sql, homeStation)
   const messages = [{ role: 'user', content: question }]
   const toolCalls = []
   const usage = { input_tokens: 0, output_tokens: 0 }
@@ -321,7 +354,7 @@ export async function askQuestion({ anthropic, sql, question, now = new Date() }
     response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: systemPromptFor(now),
+      system: systemPromptFor(now, home),
       tools: TOOLS,
       messages,
     })
@@ -382,5 +415,6 @@ export async function askQuestion({ anthropic, sql, question, now = new Date() }
     usage,
     model: MODEL,
     promptVersion: PROMPT_VERSION,
+    homeStation: home.stop_id,
   }
 }

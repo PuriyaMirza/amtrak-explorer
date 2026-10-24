@@ -7,9 +7,9 @@ import { scoreCase } from '../eval/score.js'
 // These guard the case list itself: a typo'd check name in cases.js would
 // otherwise be silently ignored by the scorer (and the case would pass).
 
-test('there are exactly 40 cases with unique ids', () => {
-  assert.equal(CASES.length, 40)
-  assert.equal(new Set(CASES.map((c) => c.id)).size, 40)
+test('there are exactly 41 cases with unique ids', () => {
+  assert.equal(CASES.length, 41)
+  assert.equal(new Set(CASES.map((c) => c.id)).size, 41)
 })
 
 test('categories are the four documented ones, schedule has at least 10', () => {

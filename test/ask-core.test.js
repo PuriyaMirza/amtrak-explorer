@@ -21,9 +21,9 @@ const BOSTON_STATIONS = [
 ]
 const BOSTON_ROUTES = [{ route_long_name: 'Acela', stops: ['Boston', 'New Haven'] }]
 
-test('constants: model is pinned and the prompt version is v3 (plan_weekend added)', () => {
+test('constants: model is pinned and the prompt version is v4 (home station added)', () => {
   assert.equal(MODEL, 'claude-sonnet-5-5')
-  assert.equal(PROMPT_VERSION, 'v3')
+  assert.equal(PROMPT_VERSION, 'v4')
 })
 
 test('tool_use then text: runs the real query and returns the full result shape', async () => {
@@ -69,7 +69,8 @@ test('the first request carries the pinned model, system prompt (with today) and
   assert.equal(req.model, MODEL)
   assert.equal(req.system, systemPromptFor(now))
   assert.ok(req.system.startsWith(SYSTEM_PROMPT))
-  assert.match(req.system, /Today is friday 2026-10-23 \(US Eastern time\)\.$/)
+  assert.match(req.system, /Today is friday 2026-10-23 \(US Eastern time\)\. /)
+  assert.match(req.system, /home station is New York Penn Station \(NYP\)/)
   assert.deepEqual(req.tools, [SEARCH_TOOL, FIND_TRAINS_TOOL, PLAN_WEEKEND_TOOL])
   assert.deepEqual(req.tools, TOOLS)
   assert.deepEqual(req.messages, [{ role: 'user', content: 'hello' }])
