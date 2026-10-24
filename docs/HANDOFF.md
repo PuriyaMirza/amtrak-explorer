@@ -6,14 +6,16 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 ## Where things stand
 
 - **Shipped (all merged to `main`, live on Vercel):** PR #3 eval harness, #4 ask-box logging,
-  #5 `find_trains`, #6 `plan_weekend`, #7 docs, #8 eval scorer v2.
+  #5 `find_trains`, #6 `plan_weekend`, #7 docs, #8 eval scorer v2, #11 tool labels,
+  #12 home station (prompt v4), #13 station picker.
 - **Evals** (`eval/RESULTS.md`), all run locally on Puriya's Mac:
 
   | Run | Prompt | Scorer | Pass | Schedule |
   |---|---|---|---|---|
   | 2026-10-23 baseline | v1 | 1 | 27/40 | 0/13 |
   | 2026-10-24 after PR #6 | v3 | 1 | 38/40 | 12/13 |
-  | 2026-10-24 after PR #8 | v3 | 2 | **40/40** | **13/13** |
+  | 2026-10-24 after PR #8 | v3 | 2 | 40/40 | 13/13 |
+  | 2026-10-24 after PR #12 | v4 | 2 | **41/41** | **14/14** |
 
   The 38 → 40 jump is a **scorer** fix, not a model change: both failures were scorer
   false negatives that Puriya caught by reading the answers. Scorer v2 is guarded by
@@ -26,26 +28,24 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
   project is **deleted**; its 13 SQL snippets are in `sql/snippets_from_supabase.sql`.
   `bike-forecast` on Supabase is a separate project. Don't touch it.
 
-## Do first (found in Puriya's live test)
+## Do first (next session)
 
-1. ~~**Bug: "Searched for: `undefined`"**~~ Fixed: `tool-labels.js` + `test/tool-labels.test.js`. under answers. `index.html` (~line 161-163) renders
-   `toolCalls[].query`, which only `search_trains` entries have. `find_trains` /
-   `plan_weekend` entries have `name` + `input` instead. Fix: render per tool, e.g.
-   "Looked up trains NYP → BOS, Thu 2026-10-29" / "Planned a weekend NYP ⇄ PHL". Small
-   PR. There are no browser tests, so add a pure formatting function plus a unit test.
-2. **Decided 2026-10-24: (a) default origin, plus a station picker.** Default NYP; a
-   type-to-search "Your station: …" picker in the top right sends `home_station`. PR A
-   (server, prompt v4, eval case `no-origin-uses-home-station`) then PR B (picker UI).
-   Both shipped (#12, then the picker); v4 eval: 41/41. Background: with no origin given, the model asks
-   "where are you leaving from?", and each question is independent, so the follow-up
-   had to restate everything. Options were:
-   - (a) **Default origin = NYP** when none is given. The app's home base, a one-line
-     prompt rule; say "from New York Penn" in the answer.
-   - (b) **Conversation memory.** Send prior turns to `/api/ask`. More cost and tokens per
-     question, more eval surface (multi-turn cases), and the 500-char cap needs rethinking.
-   - (c) Both.
-   Either one changes `SYSTEM_PROMPT` → bump `PROMPT_VERSION` to v4 and re-run evals.
-   Add an eval case for the no-origin question.
+1. **"Next train" needs the current time.** Live test 2026-10-24: "when is the next train
+   to New York" got "I don't know the current time". `systemPromptFor` gives the model
+   today's date but not the time. Fix: add the current New York time the same way
+   (from the real clock, never the request), plus an eval case for a "next train"
+   question. Prompt change → `PROMPT_VERSION` v5, then `npm run eval` on the Mac.
+   Watch the eval: "next" answers depend on the run time, so check a time window or
+   `departAfter` in the tool input, not a fixed train.
+
+## Done 2026-10-24 (found in Puriya's live test)
+
+- "Searched for: `undefined`" under answers → #11 (`tool-labels.js`).
+- No-origin questions: decided (a) default origin + a station picker (not conversation
+  memory). #12 server side, prompt v4 (`home_station`, validated by `resolveHomeStation`
+  against `stops`; eval 41/41). #13 the "Your station" type-to-search picker
+  (`home-station.js`, `home_station` browser event; our names for the three "Boston"
+  stations: South Station, Back Bay, North Station).
 
 ## Still open (from CLAUDE.md, carried over)
 
