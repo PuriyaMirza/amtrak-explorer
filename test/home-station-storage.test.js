@@ -49,6 +49,11 @@ test('saving a malformed station keeps the default; a storage failure still retu
   assert.deepEqual(saveHomeStation(broken, { stop_id: 'PHL', name: 'Philadelphia' }), { stop_id: 'PHL', name: 'Philadelphia' })
 })
 
+test('the three "Boston" stations get distinct names', () => {
+  const names = ['BOS', 'BBY', 'BON'].map((id) => stationFromSearchRow({ stop_id: id, stop_name: 'Boston' }).name)
+  assert.deepEqual(names, ['Boston South Station', 'Boston Back Bay', 'Boston North Station'])
+})
+
 test('stationFromSearchRow: feed name, except NYP keeps the friendly name', () => {
   assert.deepEqual(stationFromSearchRow({ stop_id: 'PHL', stop_name: 'Philadelphia', stop_timezone: 'x' }),
     { stop_id: 'PHL', name: 'Philadelphia' })

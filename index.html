@@ -70,7 +70,7 @@
         const li = document.createElement('li')
         li.className = 'clickable'
         li.tabIndex = 0
-        li.textContent = row.stop_name + ' '
+        li.textContent = stationFromSearchRow(row).name + ' '
         const meta = document.createElement('span')
         meta.className = 'meta'
         meta.textContent = row.stop_id

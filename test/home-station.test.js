@@ -45,6 +45,13 @@ test('prompt injection: request text never reaches the system prompt', async () 
   }
 })
 
+test('a station with an unclear feed name gets our name in the prompt', async () => {
+  const anthropic = fakeAnthropic([textResponse('ok')])
+  const stops = [{ stop_id: 'BON', stop_name: 'Boston', stop_timezone: 'America/New_York' }]
+  await askQuestion({ anthropic, sql: fakeSql({ stops }), question: 'hi', homeStation: 'BON', now })
+  assert.match(anthropic.calls[0].system, /home station is Boston North Station \(BON\)/)
+})
+
 test('a valid home station goes into the prompt as the table name and id', async () => {
   const anthropic = fakeAnthropic([textResponse('ok')])
   const result = await askQuestion({ anthropic, sql: fakeSql({ stops: STOPS }), question: 'hi', homeStation: 'phl', now })

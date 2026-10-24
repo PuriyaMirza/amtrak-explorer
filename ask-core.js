@@ -11,7 +11,7 @@
 import { searchTrains } from './search.js'
 import { findDirectTrains, findStationById, todayInNewYork, WEEKDAYS } from './schedule.js'
 import { planWeekend, DEFAULT_PAIR_LIMIT } from './weekend.js'
-import { DEFAULT_HOME_STATION } from './home-station.js'
+import { DEFAULT_HOME_STATION, stationName } from './home-station.js'
 
 // Pinned on purpose: the app and the evals must use the same model, otherwise
 // an eval pass rate says nothing about what users actually get.
@@ -251,7 +251,8 @@ export async function resolveHomeStation(sql, requestedId) {
     return DEFAULT_HOME_STATION
   }
   try {
-    return (await findStationById(sql, requestedId)) ?? DEFAULT_HOME_STATION
+    const station = await findStationById(sql, requestedId)
+    return station ? { stop_id: station.stop_id, name: stationName(station.stop_id, station.name) } : DEFAULT_HOME_STATION
   } catch {
     return DEFAULT_HOME_STATION
   }

@@ -13,12 +13,27 @@ export const DEFAULT_HOME_STATION = { stop_id: 'NYP', name: 'New York Penn Stati
 
 export const STORAGE_KEY = 'amtrak_home_station'
 
+// Our names for stations whose feed name is unclear. "Boston" is the feed's
+// name for THREE stations, so without these the picker shows three
+// identical rows. Used by the picker and by the server's prompt.
+export const STATION_NAMES = {
+  NYP: DEFAULT_HOME_STATION.name,
+  BOS: 'Boston South Station',
+  BBY: 'Boston Back Bay',
+  BON: 'Boston North Station',
+}
+
+// The name to show for a station: ours if we have one, else the feed's.
+export function stationName(stopId, feedName) {
+  return Object.hasOwn(STATION_NAMES, stopId) ? STATION_NAMES[stopId] : feedName
+}
+
 const STOP_ID_PATTERN = /^[A-Za-z0-9]{1,10}$/
 
 // A station from an /api/search row ({ stop_id, stop_name, ... }).
 export function stationFromSearchRow(row) {
   if (row.stop_id === DEFAULT_HOME_STATION.stop_id) return DEFAULT_HOME_STATION
-  return { stop_id: row.stop_id, name: row.stop_name }
+  return { stop_id: row.stop_id, name: stationName(row.stop_id, row.stop_name) }
 }
 
 function isStation(value) {
