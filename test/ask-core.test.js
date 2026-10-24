@@ -8,6 +8,7 @@ import {
   systemPromptFor,
   SEARCH_TOOL,
   FIND_TRAINS_TOOL,
+  PLAN_WEEKEND_TOOL,
   TOOLS,
   MAX_ROUNDS,
   TRAIN_RESULT_LIMIT,
@@ -20,9 +21,9 @@ const BOSTON_STATIONS = [
 ]
 const BOSTON_ROUTES = [{ route_long_name: 'Acela', stops: ['Boston', 'New Haven'] }]
 
-test('constants: model is pinned and the prompt version is v2 (find_trains added)', () => {
+test('constants: model is pinned and the prompt version is v3 (plan_weekend added)', () => {
   assert.equal(MODEL, 'claude-sonnet-5-5')
-  assert.equal(PROMPT_VERSION, 'v2')
+  assert.equal(PROMPT_VERSION, 'v3')
 })
 
 test('tool_use then text: runs the real query and returns the full result shape', async () => {
@@ -59,7 +60,7 @@ test('tool_use then text: runs the real query and returns the full result shape'
   assert.ok(sql.calls.every((c) => c.values.includes('%boston%')))
 })
 
-test('the first request carries the pinned model, system prompt (with today) and both tools', async () => {
+test('the first request carries the pinned model, system prompt (with today) and all three tools', async () => {
   const anthropic = fakeAnthropic([textResponse('hi')])
   const now = new Date('2026-10-23T16:00:00Z')
   await askQuestion({ anthropic, sql: fakeSql(), question: 'hello', now })
@@ -69,7 +70,7 @@ test('the first request carries the pinned model, system prompt (with today) and
   assert.equal(req.system, systemPromptFor(now))
   assert.ok(req.system.startsWith(SYSTEM_PROMPT))
   assert.match(req.system, /Today is friday 2026-10-23 \(US Eastern time\)\.$/)
-  assert.deepEqual(req.tools, [SEARCH_TOOL, FIND_TRAINS_TOOL])
+  assert.deepEqual(req.tools, [SEARCH_TOOL, FIND_TRAINS_TOOL, PLAN_WEEKEND_TOOL])
   assert.deepEqual(req.tools, TOOLS)
   assert.deepEqual(req.messages, [{ role: 'user', content: 'hello' }])
 })
@@ -238,7 +239,7 @@ test('find_trains: the result is row-capped (default 12, never above 20), summar
   assert.equal(few.result.trains.length, 3)
 })
 
-test('both tools can be used in one question, and each round re-sends the tools', async () => {
+test('tools can be mixed in one question, and each round re-sends the tools', async () => {
   const anthropic = fakeAnthropic([
     toolUseResponse('boston', { id: 'tu_a' }),
     toolUseFor('find_trains', { from: 'NYP', to: 'BOS', date: '2026-10-29' }, { id: 'tu_b' }),
@@ -247,7 +248,7 @@ test('both tools can be used in one question, and each round re-sends the tools'
   const sql = fakeSql({ stations: [], routes: [], stops: STOPS, legs: { 'NYP>BOS': NYP_BOS } })
   const result = await askQuestion({ anthropic, sql, question: 'q', now: NOW })
   assert.deepEqual(result.toolCalls.map((c) => c.name), ['search_trains', 'find_trains'])
-  assert.ok(anthropic.calls.every((c) => c.tools.length === 2))
+  assert.ok(anthropic.calls.every((c) => c.tools.length === 3))
 })
 
 test('an unknown tool name is reported back, not executed', async () => {

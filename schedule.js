@@ -72,18 +72,18 @@ const HOLIDAY_NOTE =
 
 // Parses 'YYYY-MM-DD' strictly. Returns a UTC midnight Date, or null if the
 // string isn't a real calendar date ("2026-02-31" is rejected).
-function parseIsoDate(text) {
+export function parseIsoDate(text) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
   if (!m) return null
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
   return d.toISOString().slice(0, 10) === text ? d : null
 }
 
-const toIso = (d) => d.toISOString().slice(0, 10)
+export const toIso = (d) => d.toISOString().slice(0, 10)
 // 2026-10-29 -> 20261029, the way the calendar table stores dates.
 const toYmdInt = (d) => Number(toIso(d).replaceAll('-', ''))
 const fromYmdInt = (n) => `${String(n).slice(0, 4)}-${String(n).slice(4, 6)}-${String(n).slice(6, 8)}`
-const addDays = (d, n) => new Date(d.getTime() + n * SECONDS_PER_DAY * 1000)
+export const addDays = (d, n) => new Date(d.getTime() + n * SECONDS_PER_DAY * 1000)
 
 // "Today" as a calendar date in New York, because the feed is Eastern and
 // "next Thursday" should not flip at midnight UTC. `now` is injectable so
@@ -98,7 +98,7 @@ export function todayInNewYork(now = new Date()) {
 }
 
 // 'HH:MM' (24-hour) -> minutes after midnight, or null if malformed.
-function parseClock(text) {
+export function parseClock(text) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(text)
   if (!m) return null
   const h = Number(m[1])
@@ -114,6 +114,19 @@ function formatClock(seconds) {
   const minutes = Math.floor((s % 3600) / 60)
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12
   return `${h12}:${String(minutes).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`
+}
+
+// The inverse of formatClock: "7:05 PM" -> minutes after midnight (1145), or
+// null if it isn't in that shape. findDirectTrains hands back display strings
+// like "7:05 PM"; planWeekend (weekend.js) needs numbers to do arithmetic on
+// them, and converting here keeps the two formats defined side by side.
+export function clockLabelToMinutes(label) {
+  const m = /^(\d{1,2}):(\d{2}) (AM|PM)$/.exec(String(label))
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h < 1 || h > 12 || min > 59) return null
+  return ((h % 12) + (m[3] === 'PM' ? 12 : 0)) * 60 + min
 }
 
 const formatDuration = (minutes) => `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`

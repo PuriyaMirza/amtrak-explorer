@@ -10,6 +10,7 @@
 // fake Anthropic client and a fake `sql` function.
 import { searchTrains } from './search.js'
 import { findDirectTrains, todayInNewYork, WEEKDAYS } from './schedule.js'
+import { planWeekend, DEFAULT_PAIR_LIMIT } from './weekend.js'
 
 // Pinned on purpose: the app and the evals must use the same model, otherwise
 // an eval pass rate says nothing about what users actually get.
@@ -18,7 +19,7 @@ export const MODEL = 'claude-sonnet-5-5'
 // Bump this whenever SYSTEM_PROMPT or the tools change in a way that could
 // move the eval pass rate. It is written into eval/RESULTS.md next to every
 // run, so a change in pass rate can be tied to a change in the prompt.
-export const PROMPT_VERSION = 'v2'
+export const PROMPT_VERSION = 'v3'
 
 export const RESULT_LIMIT = 10
 // Most trains one find_trains result may carry back to the model. A busy pair
@@ -28,6 +29,10 @@ export const RESULT_LIMIT = 10
 // "fastest" stay correct when the list is cut short.
 export const TRAIN_RESULT_LIMIT = 12
 export const TRAIN_RESULT_MAX = 20
+// Most outbound/return pairs one plan_weekend result may carry back to the model
+// (each outbound train is paired with only its latest return; see weekend.js).
+export const WEEKEND_PAIR_LIMIT = DEFAULT_PAIR_LIMIT
+export const WEEKEND_PAIR_MAX = 20
 export const MAX_ROUNDS = 4
 
 export const SEARCH_TOOL = {
@@ -115,7 +120,75 @@ export const FIND_TRAINS_TOOL = {
   },
 }
 
-export const TOOLS = [SEARCH_TOOL, FIND_TRAINS_TOOL]
+export const PLAN_WEEKEND_TOOL = {
+  name: 'plan_weekend',
+  description:
+    'Plan a ROUND TRIP with DIRECT Amtrak trains: an outbound train and a return train, ' +
+    'and how many hours the person gets at the destination. Use it for "leave Friday after ' +
+    'work and be back Sunday", "a weekend in Boston", "how long can I stay if I go Saturday ' +
+    'and return Sunday night", or any question that needs both directions together. Use ' +
+    'find_trains instead for a one-way question. Defaults to out Friday, back Sunday. Give ' +
+    'outDate/returnDate (YYYY-MM-DD) when the person names or implies dates; otherwise give ' +
+    'outDay/returnDay (weekday names), meaning the next such day. Days are physical days. ' +
+    'The result has "pairs" (each outbound train with its LATEST working return and ' +
+    '"hoursAtDestination", real elapsed time; an overnight outbound, arriveDayOffset 1, ' +
+    'leaves less time), "outbound" and "inbound" (the trains on each day, possibly cut short), ' +
+    '"summary" (counts, the best pair for the earliest outbound, the most hours possible), ' +
+    '"unavailable", and "notes" that you must respect, including the dates used. ' +
+    'Stations may be ids (NYP, BOS, PHL, WAS) or names; if a name is ambiguous the result ' +
+    'lists candidates, so retry with a stop_id. All times are US Eastern.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      from: {
+        type: 'string',
+        description: 'Home station for the trip: a stop_id like "NYP" or a name like "New York".',
+      },
+      to: {
+        type: 'string',
+        description: 'The destination: a stop_id like "PHL" or a name like "Philadelphia".',
+      },
+      outDate: {
+        type: 'string',
+        description:
+          'The day of the outbound trip, YYYY-MM-DD. Work out relative dates from today\'s date in the system prompt.',
+      },
+      returnDate: {
+        type: 'string',
+        description: 'The day of the return trip, YYYY-MM-DD. If omitted: the first returnDay on or after the outbound date.',
+      },
+      outDay: {
+        type: 'string',
+        enum: WEEKDAYS,
+        description: 'Only when no outDate is given: the weekday to leave (default friday), meaning the next such day.',
+      },
+      returnDay: {
+        type: 'string',
+        enum: WEEKDAYS,
+        description: 'Only when no returnDate is given: the weekday to come back (default sunday).',
+      },
+      departAfter: {
+        type: 'string',
+        description: 'Earliest outbound departure, 24-hour, e.g. "17:00" for "after work".',
+      },
+      returnDepartAfter: {
+        type: 'string',
+        description: 'Earliest return departure, 24-hour, e.g. "15:00".',
+      },
+      minHoursAtDestination: {
+        type: 'number',
+        description: 'Only pairs that leave at least this many hours at the destination.',
+      },
+      limit: {
+        type: 'integer',
+        description: `How many pairs to list (default ${WEEKEND_PAIR_LIMIT}, max ${WEEKEND_PAIR_MAX}).`,
+      },
+    },
+    required: ['from', 'to'],
+  },
+}
+
+export const TOOLS = [SEARCH_TOOL, FIND_TRAINS_TOOL, PLAN_WEEKEND_TOOL]
 
 // The instructions that never change. The date is added per request, see
 // systemPromptFor() below. (Two phrases here, "You help people explore Amtrak"
@@ -123,14 +196,17 @@ export const TOOLS = [SEARCH_TOOL, FIND_TRAINS_TOOL]
 // looks for in an answer; if you reword them, update eval/cases.js.)
 export const SYSTEM_PROMPT =
   'You help people explore Amtrak stations, routes and schedules. ' +
-  'You have two tools: search_trains (stations and routes by name) and ' +
-  'find_trains (direct trains between two stations, with times and durations). ' +
+  'You have three tools: search_trains (stations and routes by name), ' +
+  'find_trains (direct trains between two stations, with times and durations) and ' +
+  'plan_weekend (round trips: an outbound and a return train, and the hours at the destination). ' +
+  'Use plan_weekend when the person wants to go and come back (for example Friday out, Sunday back); ' +
+  'use find_trains for one-way questions. ' +
   'You can ONLY state stations, routes, train numbers, times and durations that a tool returned. ' +
   'Never invent a station, route, schedule, duration, or price. ' +
   'If a tool returns nothing relevant, say so plainly. ' +
   'You have no fares, live delay information, seat availability or scenery data, and you cannot book ' +
   'tickets; say so if asked, rather than guessing. ' +
-  'find_trains covers direct trains only, not connections. ' +
+  'find_trains and plan_weekend cover direct trains only, not connections. ' +
   'Times from find_trains are US Eastern time at every station, as the schedule data gives them, ' +
   'so say "Eastern time" when you quote times, and mention it especially for stations in other time zones. ' +
   'If a train arrives the next day (arriveDayOffset 1), say so. ' +
@@ -196,6 +272,27 @@ async function runTool(name, input, sql, now) {
       today: todayInNewYork(now),
     })
     return { result, rowCount: result.trains.length }
+  }
+
+  if (name === 'plan_weekend') {
+    // Same pattern as find_trains: a whitelist, a row cap, and `today` from the
+    // real clock (never from the model).
+    const asked = input.limit == null ? WEEKEND_PAIR_LIMIT : Number(input.limit)
+    const limit = Number.isFinite(asked) ? Math.min(asked, WEEKEND_PAIR_MAX) : asked
+    const result = await planWeekend(sql, {
+      from: input.from,
+      to: input.to,
+      outDate: input.outDate,
+      returnDate: input.returnDate,
+      outDay: input.outDay,
+      returnDay: input.returnDay,
+      departAfter: input.departAfter,
+      returnDepartAfter: input.returnDepartAfter,
+      minHoursAtDestination: input.minHoursAtDestination,
+      limit,
+      today: todayInNewYork(now),
+    })
+    return { result, rowCount: result.pairs.length }
   }
 
   throw new Error(`unknown tool: ${name}`)

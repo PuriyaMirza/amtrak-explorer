@@ -71,6 +71,11 @@ schedule.js         findDirectTrains(sql, {from, to, date|weekday, departAfter,
                     departBefore, route, limit}) — direct trains, times, durations.
                     Plain data, no prompt text, so a browse endpoint can reuse it.
                     Also resolveStation() (ids, aliases, ambiguity), todayInNewYork()
+weekend.js          planWeekend(sql, {from, to, outDate|outDay, returnDate|returnDay,
+                    departAfter, returnDepartAfter, minHoursAtDestination, limit}) —
+                    round trips: pairs outbound + return trains (built on
+                    findDirectTrains, no SQL of its own) and reports hoursAtDestination.
+                    Plain data, reusable by a future browse "weekend finder"
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
                     also exports deviceId/sessionId (index.html sends them to /api/ask)
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
@@ -79,7 +84,8 @@ ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never thro
 styles.css
 ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool loop,
                     plus MODEL, PROMPT_VERSION and the prompt/tool constants.
-                    Tools: search_trains (names) and find_trains (schedule.js);
+                    Tools: search_trains (names), find_trains (schedule.js) and
+                    plan_weekend (weekend.js);
                     systemPromptFor() adds today's date per request
 api/search.js       GET  /api/search?q=   → searchTrains
 api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
@@ -117,8 +123,8 @@ any case failed (expected at the v1 baseline, where the schedule cases failed). 
 key, spend limit, SSO), in which case nothing is written to RESULTS.md.
 `vercel env pull` writes empty values for Sensitive variables; if the runner
 says a variable is EMPTY, paste the real value into `.env.local`. The `schedule` cases failed at the v1 baseline (recorded in
-RESULTS.md); `find_trains` (prompt v2) is what should make them pass. The two
-`weekend-*` cases still need the `plan_weekend` tool (PR 4) and keep failing until then.
+RESULTS.md); `find_trains` (prompt v2) and `plan_weekend` (prompt v3) are what should
+make them pass. The two `weekend-*` cases require `plan_weekend`.
 
 ### The architecture rule
 
@@ -226,20 +232,42 @@ POST `{ question }` → `{ answer, toolCalls }`
 
 1. Browser POSTs the question to our function (never to Anthropic directly —
    the API key would be visible in page source)
-2. Function asks Claude, offering two tools: `search_trains` (stations/routes by
-   name) and `find_trains` (direct trains between two stations: times,
-   durations, weekdays, dates)
+2. Function asks Claude, offering three tools: `search_trains` (stations/routes by
+   name), `find_trains` (direct trains between two stations: times, durations,
+   weekdays, dates) and `plan_weekend` (round trips: outbound + return pairs and
+   hours at the destination)
 3. If Claude requests a tool, **our code** runs the real, fixed query (the model
    only fills in parameters; it never writes SQL)
 4. Real rows go back to Claude, which writes the final answer
 
 Usually two round trips to Claude; up to `MAX_ROUNDS` (4) if it chains tools.
 
-The system prompt (v2) says: state times/durations only if a tool returned them,
+The system prompt (v3) says: state times/durations only if a tool returned them,
 say times are Eastern, and add a "holidays aren't modelled, confirm on amtrak.com"
 caveat to schedule answers. Today's date (New York) is appended per request so
 "next Thursday" can be turned into a date. `find_trains` results are capped at
 12 trains by default (20 max); its `summary` still covers all trains.
+`plan_weekend` has the same shape of guard: inputs are whitelisted in `runTool`
+and `today` always comes from the real clock, never from the model.
+
+### planWeekend (weekend.js)
+
+- Both legs come from `findDirectTrains` (outbound `from -> to` on `outDate`, return
+  `to -> from` on `returnDate`); there is no SQL in `weekend.js`.
+- Dates: a given date wins; a bare weekday means the next such day (today counts);
+  the return is the first `returnDay` on or after the outbound date. The dates used
+  are stated in `notes`.
+- `hoursAtDestination` = return departure - outbound arrival, **including
+  `arriveDayOffset`** (an overnight outbound arrives the next day, so you get less
+  time). It is real elapsed time: if the clocks change between the two days it is an
+  hour off the clock difference, and a note says so. Pairs below
+  `minHoursAtDestination` (default 0) are dropped.
+- **The cap:** each outbound train is paired only with its *latest* working return
+  (the most time at the destination), then at most `limit` pairs are kept (default 10,
+  model max 20; the ones with the most hours, shown in departure order). The
+  `outbound`/`inbound` lists show at most 12 trains each; `summary` has the full counts.
+- `ambiguous`/`not_found` stations, `outsideFeed`, `unavailable` and the notes are
+  passed through from `findDirectTrains`.
 
 **Env var:** `ANTHROPIC_API_KEY` in Vercel, server-side only.
 
@@ -275,8 +303,9 @@ Other data facts that bite:
 
 Answerable (PR 3): direct-train times, durations, first/last/fastest train,
 weekday- and date-specific schedules, boarding restrictions, "what serves X".
-Still not answerable: connections, fares, live delays, holidays, weekend
-pairing (`plan_weekend`, PR 4), scenery, booking.
+Answerable (PR 4): round trips ("leave Friday after 6, back Sunday") with hours at
+the destination, via `plan_weekend`.
+Still not answerable: connections, fares, live delays, holidays, scenery, booking.
 
 ---
 
