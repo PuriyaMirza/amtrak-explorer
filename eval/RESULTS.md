@@ -57,3 +57,4 @@ directly comparable. Existing rows are untouched and are implicitly scorer v1.
 | 2026-10-24T10:37Z | local | claude-sonnet-5-5 | v3 (scorer 2) | 40/40 (100%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 13/13 | - | - |
 | 2026-10-24T11:37Z | local | claude-sonnet-5-5 | v4 (scorer 2) | 41/41 (100%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 14/14 | - | - |
 | 2026-10-26T11:29Z | local | claude-sonnet-5-5 | v5 (scorer 2) | 40/41 (98%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 13/14 | missed-refusal 1 | cardinal-no-boarding-was-nyc |
+| 2026-10-26T11:47Z | local | claude-sonnet-5-5 | v5 (scorer 3) | 41/41 (100%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 14/14 | - | - |

@@ -33,7 +33,7 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
   | 2026-10-24 after PR #8 | v3 | 2 | 40/40 | 13/13 |
   | 2026-10-24 after PR #12 | v4 | 2 | 41/41 | 14/14 |
   | 2026-10-26 after PR #15 | v5 | 2 | 40/41 | 13/14 |
-  | **scorer 3: no row yet** | v5 | 3 | ? | ? |
+  | 2026-10-26 after scorer 3 | v5 | 3 | **41/41** | 14/14 |
 
 - **The v5 run came in at 40/41**, and the one failure was **not** a model bug. The answer to
   `cardinal-no-boarding-was-nyc` was correct and grounded — it said no three ways ("No.",
@@ -48,22 +48,22 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
   fails a *correct* answer. Adversarial fixtures 75 → 80 (the real answer, two phrasing
   variants, two negatives that must keep failing). vs the frozen v1 scorer: 19 fixed,
   **0 regressed**. `npm test` 270 pass.
+- **The scorer-3 re-run came in 41/41** (2026-10-26), matching the offline prediction. The other
+  40 cases scored identically under scorer 2 and scorer 3, which is the live evidence that the
+  three new phrasings widened nothing. **Prompt v5 is a genuine 41/41.**
 
 ## Do first (next session), in order
 
-1. **Record a scorer-3 eval row** (Puriya, VS Code terminal; ~5 min, a few tens of cents):
-   `git pull && npm run eval`. Expect **41/41**; offline scoring of the real v5 answer already
-   passes all 8 of that case's checks, so this row is for the log, not a fix. Commit only
-   `eval/RESULTS.md`. Rows at scorer 2 and scorer 3 are **not** directly comparable.
-2. **Live check of the v5 layout** (never done): ask "first three trains to Providence this
-   Thursday". Expect a headline, 3 rows, a footnote. If the model ignores the format, the page
-   falls back to one paragraph (not broken, just unformatted) and the prompt needs firmer wording.
-3. **"Next train" needs the current time** (carried over, still the next real feature). "When is
+1. **Live check of the v5 layout** (still never done — the evals score answer *text*, not the
+   page): ask "first three trains to Providence this Thursday" on the live site. Expect a
+   headline, 3 rows, a footnote. If the model ignores the format, the page falls back to one
+   paragraph (not broken, just unformatted) and the prompt needs firmer wording.
+2. **"Next train" needs the current time** (carried over, the next real feature). "When is
    the next train to New York" got "I don't know the current time": `systemPromptFor` gives
    today's date but not the time. Fix: add the current New York time the same way (server clock,
    never the request — the same injection guard as `today`), plus an eval case that checks a time
    window or `departAfter` in the tool input, not a fixed train. Prompt change → **v6**, then
-   `npm run eval`.
+   `npm run eval` (the v5/scorer-3 41/41 is the baseline it has to beat or hold).
 
 ## Small open items
 
