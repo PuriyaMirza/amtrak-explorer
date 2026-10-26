@@ -481,8 +481,11 @@ blocked on having enough data to say anything honest.
   read only by `refusalExpected` / `declineConstraint`. `REFUSAL_PATTERN_V1` and `_LOOSE` are
   unchanged, because `noRefusal` falls back to `_LOOSE` when a scope disclaimer is cut — so
   widening `_LOOSE` would have made the "must NOT refuse" direction stricter too. Against the
-  frozen v1 scorer over all 80 adversarial fixtures: 19 fixed, **0 regressed**. No eval row at
-  scorer 3 yet (needs a paid re-run; only that one case can change).
+  frozen v1 scorer over all 80 adversarial fixtures: 19 fixed, **0 regressed**.
+- **Prompt v5 re-run** (2026-10-26, scorer 3): **41/41 (100%)**, schedule 14/14. Confirms two
+  things: `cardinal-no-boarding-was-nyc` passes, and **nothing else moved** — the other 40 cases
+  scored the same under scorer 2 and scorer 3, so the new phrasings widened nothing. v5 is a
+  genuine 41/41; the 40/41 was the measuring instrument.
 
 **Three of the four recorded eval "failures" so far have been scorer bugs, not model bugs.**
 Read the answer text before believing a failure — and treat the evaluator as something that
@@ -498,8 +501,8 @@ works, which is prompt v6).
 
 - [x] **(a) Post-PR-4 eval run.** Done (38/40, 2026-10-24); both failures were scorer bugs, fixed in
       scorer v2. Scorer-2 rows recorded since (v3 40/40, v4 41/41, v5 40/41).
-- [ ] **(a2) Record a scorer-3 eval row.** `npm run eval` after the scorer 3 change (2026-10-26).
-      Offline checks say the one v5 failure now passes; the row is for the log, not a fix.
+- [x] **(a2) Record a scorer-3 eval row.** Done 2026-10-26: **41/41**, matching the offline
+      prediction exactly, with no movement in the other 40 cases.
 - [x] **(b) Supabase `amtrak-explorer` project:** deleted 2026-10-24 after the 13 snippets were
       saved to `sql/snippets_from_supabase.sql`. (`bike-forecast` still lives on Supabase; don't touch it.)
 - [ ] **(c) Inert RLS on `events`.** Decide: drop it or keep it (see Known cleanup items).

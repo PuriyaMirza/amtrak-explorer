@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "mcp__Figma"
+      "mcp__Figma",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr merge *)"
     ]
   }
 }
