@@ -285,7 +285,10 @@ text goes back to the model as the tool result so it can correct itself.
   - **v2**: adds `find_trains` (PR 3)
   - **v3**: adds `plan_weekend` (PR 4)
   - **v4**: adds the home station (default New York Penn; the browser can send another
-    stop_id as `home_station`); current
+    stop_id as `home_station`)
+  - **v5**: answer layout: a headline line, one `dep → arr · train · duration [· note]`
+    line per train, then the holiday line. `renderAnswer` in index.html turns those lines
+    into rows (escaped); other answers stay one paragraph. Current; needs an eval run
 
 **System prompt rules (v4)** (if you reword them, update `eval/cases.js`, which looks
 for some of these phrases)
@@ -300,7 +303,8 @@ for some of these phrases)
 - **Home station** (v4): no departure station given → leave from the home station and say
   so ("from New York Penn Station"). Added per request by `systemPromptFor`, like today's date.
 - Direct trains only; no fares, live delays, seat availability or booking. Say so rather than guess.
-- Ambiguous station names: say which matched. Plain text only (no markdown). A few sentences.
+- Ambiguous station names: say which matched. Plain text only (no markdown). Train lists use
+  the v5 line format above (the page parses it); otherwise one or two short sentences.
 
 ### planWeekend (weekend.js)
 

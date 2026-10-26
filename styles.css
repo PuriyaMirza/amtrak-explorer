@@ -1,33 +1,114 @@
-body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
-#q { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; }
-h2 { margin: 24px 0 8px; font-size: 14px; text-transform: uppercase; color: #666; }
-ul { list-style: none; padding: 0; margin: 0; }
-li { padding: 6px 0; border-bottom: 1px solid #eee; }
-.meta { color: #888; font-size: 13px; }
-.status { color: #888; margin-top: 16px; }
-.clickable { cursor: pointer; }
-.clickable:hover { background: #f5f5f5; }
-.clickable:active { background: #e0e0e0; }
-.ask-heading { margin-top: 40px; }
-#ask-form { display: flex; gap: 8px; }
-#ask-input { flex: 1; padding: 8px; font-size: 16px; box-sizing: border-box; }
-#ask-button { padding: 8px 16px; font-size: 16px; cursor: pointer; }
+/* "Stamp blues" palette, from the Figma component sheet (node 213:555).
+   Indigo carries the dark surfaces, Paper white the light; Airmail aqua always
+   pairs with Night indigo ink; Lavender highlights; Perforation for rules. */
+:root {
+  --surface-1: #1a1856; /* Night indigo: ink, borders */
+  --surface-2: #33308a; /* Stamp indigo: buttons, selected, eyebrows */
+  --surface-3: #a6dcd9; /* Airmail aqua: page background, soft pills */
+  --surface-4: #f2f1ea; /* Paper white: cards */
+  --accent-1: #c6c3f0;  /* Lavender sheen: highlights */
+  --accent-2: #16151c;  /* Perforation: rules */
+  --error: #a32d2d;
+}
+
+* { box-sizing: border-box; }
+body {
+  font-family: 'Manrope', system-ui, sans-serif; color: var(--surface-1);
+  background: var(--surface-3); max-width: 720px; margin: 0 auto; padding: 48px 16px;
+}
+
+/* Header */
+.eyebrow { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--surface-2); }
+h1 { margin: 10px 0 0; font-size: 36px; font-weight: 700; }
+.lede { margin: 10px 0 32px; font-size: 16px; line-height: 1.5; }
+
+/* Cards */
+.card {
+  background: var(--surface-4); border: 1px solid var(--surface-1); border-radius: 10px;
+  padding: 24px; margin-bottom: 24px;
+}
+.card-head { display: flex; flex-direction: column; gap: 6px; }
+.card-num { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--surface-2); }
+.card-title { margin: 0; font-size: 18px; font-weight: 700; }
+.card-desc { margin: 0; font-size: 13px; line-height: 1.45; }
+.rule { height: 1px; background: var(--accent-2); border: none; margin: 16px 0; }
+
+/* Inputs and buttons */
+#q, #ask-input, #home-station-input {
+  width: 100%; font: inherit; font-size: 16px; color: var(--surface-1); background: var(--surface-4);
+  border: 1px solid var(--surface-1); border-radius: 8px; padding: 10px 12px;
+}
+#q:focus, #ask-input:focus, #home-station-input:focus { outline: none; border: 2px solid var(--surface-2); padding: 9px 11px; }
+#ask-form { display: flex; gap: 10px; }
+#ask-input { flex: 1; }
+#ask-button {
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--surface-4); background: var(--surface-2);
+  border: none; border-radius: 8px; padding: 11px 18px; cursor: pointer;
+}
 #ask-button:disabled { opacity: 0.5; cursor: default; }
-.answer { margin-top: 16px; line-height: 1.6; }
-.status.error { color: #a32d2d; }
-code { background: #f1efe8; padding: 1px 5px; border-radius: 4px; font-size: 14px; }
+
+/* Results (rendered by index.html) */
+h2 { margin: 20px 0 8px; font-size: 13px; font-weight: 500; }
+ul { list-style: none; padding: 0; margin: 0; }
+li { padding: 8px 4px; border-bottom: 1px solid rgba(22, 21, 28, 0.15); font-size: 14px; }
+li:last-child { border-bottom: none; }
+.meta { font-size: 12px; opacity: 0.75; }
+.status { font-size: 13px; margin-top: 16px; }
+.status.error { color: var(--error); }
+.clickable { cursor: pointer; border-radius: 8px; }
+.clickable:hover, .clickable:focus { background: rgba(198, 195, 240, 0.45); outline: none; }
+.clickable:active { background: var(--accent-1); }
+.answer { margin-top: 16px; font-size: 15px; line-height: 1.6; }
+.answer p { margin: 0 0 8px; }
+.answer-lead { font-size: 16px; font-weight: 700; }
+/* One train per row: times | train | duration, an optional note underneath. */
+.train-row {
+  display: grid; grid-template-columns: 11.5em 1fr auto; column-gap: 12px; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px solid rgba(22, 21, 28, 0.15); font-size: 14px;
+}
+.train-row:first-of-type { border-top: 1px solid rgba(22, 21, 28, 0.15); }
+.train-times { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.train-dur { font-weight: 500; font-variant-numeric: tabular-nums; }
+.train-note { grid-column: 2 / -1; font-size: 12px; opacity: 0.75; }
+.answer-note { margin-top: 12px !important; font-size: 12px; opacity: 0.75; }
+@media (max-width: 520px) {
+  .train-row { grid-template-columns: 1fr auto; }
+  .train-times { grid-column: 1 / -1; }
+  .train-note { grid-column: 1 / -1; }
+}
+code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+/* Pill: small tag. Soft = aqua + indigo ink (Figma "Pill · Tone=Soft"). */
+.pill {
+  display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--surface-3); color: var(--surface-1); vertical-align: 1px;
+}
+
+/* What the model looked up: aqua callout with an indigo bar (Figma card 05 note). */
+.lookups {
+  display: flex; gap: 10px; margin-top: 16px; padding: 12px; border-radius: 10px;
+  background: var(--surface-3); font-size: 12px; font-weight: 500; line-height: 1.45;
+}
+.lookups::before { content: ''; flex: 0 0 3px; border-radius: 2px; background: var(--surface-2); }
 
 /* "Your station" picker: top right of the page; above the heading on narrow screens. */
-.home-station { position: absolute; top: 12px; right: 16px; text-align: right; font-size: 14px; }
-#home-station-button { font: inherit; background: none; border: none; padding: 2px 0; color: #1a5fb4;
-  text-decoration: underline dotted; cursor: pointer; }
-.home-station-picker { position: absolute; right: 0; top: 100%; margin-top: 4px; width: 280px; text-align: left;
-  background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  z-index: 10; }
+.home-station { position: absolute; top: 16px; right: 16px; text-align: right; font-size: 13px; }
+#home-station-button {
+  font: inherit; font-weight: 500; color: var(--surface-1); background: var(--surface-4);
+  border: 1px solid var(--surface-1); border-radius: 999px; padding: 6px 14px; margin-left: 6px; cursor: pointer;
+}
+#home-station-button[aria-expanded="true"] { background: var(--surface-2); border-color: var(--surface-2); color: var(--surface-4); }
+.home-station-picker {
+  position: absolute; right: 0; top: 100%; margin-top: 6px; width: 300px; text-align: left;
+  background: var(--surface-4); border: 1px solid var(--surface-1); border-radius: 8px; padding: 10px;
+  box-shadow: 0 6px 16px rgba(26, 24, 86, 0.18); z-index: 10;
+}
 .home-station-picker[hidden] { display: none; }
-#home-station-input { width: 100%; padding: 6px; font-size: 16px; box-sizing: border-box; }
 #home-station-results li { padding: 6px 4px; }
 #home-station-results .status { margin-top: 4px; border: none; }
-@media (max-width: 700px) {
-  .home-station { position: relative; top: auto; right: auto; margin-top: 12px; }
+@media (max-width: 760px) {
+  body { padding-top: 16px; }
+  .home-station { position: relative; top: auto; right: auto; margin-bottom: 24px; text-align: left; }
+  .home-station-picker { left: 0; right: auto; width: 100%; }
+  h1 { font-size: 30px; }
 }
