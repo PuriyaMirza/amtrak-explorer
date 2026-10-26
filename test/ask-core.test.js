@@ -23,7 +23,7 @@ const BOSTON_ROUTES = [{ route_long_name: 'Acela', stops: ['Boston', 'New Haven'
 
 test('constants: model is pinned and the prompt version is v4 (home station added)', () => {
   assert.equal(MODEL, 'claude-sonnet-5-5')
-  assert.equal(PROMPT_VERSION, 'v4')
+  assert.equal(PROMPT_VERSION, 'v5')
 })
 
 test('tool_use then text: runs the real query and returns the full result shape', async () => {

@@ -252,6 +252,34 @@
     const askButton = document.getElementById('ask-button')
     const askResults = document.getElementById('ask-results')
 
+    // Escape before inserting: the answer is model output, and raw
+    // innerHTML with untrusted text is the shape of an XSS bug.
+    const escapeHtml = (str) => str.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ))
+
+    // The prompt (v5) asks for: a headline line, one "dep → arr · train ·
+    // duration [· note]" line per train, then the holiday sentence. Lines in
+    // that shape get a layout; anything else stays a plain paragraph, so a
+    // one-sentence answer looks the same as before. Every piece is escaped.
+    function renderAnswer(answer) {
+      const lines = answer.split('\n').map(l => l.trim()).filter(Boolean)
+      if (lines.length < 2) return `<p class="answer">${escapeHtml(answer)}</p>`
+      const isTrain = (l) => l.includes('→') && l.includes(' · ')
+      const isCaveat = (l) => /holiday/i.test(l)
+      return '<div class="answer">' + lines.map((line, i) => {
+        if (isTrain(line)) {
+          const [times, train = '', duration = '', ...note] = line.split(' · ').map(escapeHtml)
+          return `<div class="train-row"><span class="train-times">${times}</span>` +
+            `<span class="train-name">${train}</span><span class="train-dur">${duration}</span>` +
+            (note.length ? `<span class="train-note">${note.join(' · ')}</span>` : '') + '</div>'
+        }
+        if (i === lines.length - 1 && isCaveat(line)) return `<p class="answer-note">${escapeHtml(line)}</p>`
+        if (i === 0) return `<p class="answer-lead">${escapeHtml(line)}</p>`
+        return `<p>${escapeHtml(line)}</p>`
+      }).join('') + '</div>'
+    }
+
     askForm.addEventListener('submit', async (event) => {
       event.preventDefault()
       const question = askInput.value.trim()
@@ -279,13 +307,7 @@
 
         if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
 
-        // Escape before inserting: the answer is model output, and raw
-        // innerHTML with untrusted text is the shape of an XSS bug.
-        const escapeHtml = (str) => str.replace(/[&<>"']/g, (c) => (
-          { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-        ))
-
-        const parts = [`<p class="answer">${escapeHtml(data.answer)}</p>`]
+        const parts = [renderAnswer(data.answer)]
 
         // Show what the model actually looked up. This is the transparency
         // that makes the eval work possible later.

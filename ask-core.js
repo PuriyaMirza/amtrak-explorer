@@ -20,7 +20,7 @@ export const MODEL = 'claude-sonnet-5-5'
 // Bump this whenever SYSTEM_PROMPT or the tools change in a way that could
 // move the eval pass rate. It is written into eval/RESULTS.md next to every
 // run, so a change in pass rate can be tied to a change in the prompt.
-export const PROMPT_VERSION = 'v4'
+export const PROMPT_VERSION = 'v5'
 
 // Where a question starts when the person doesn't say (New York Penn). It
 // lives in home-station.js, shared with the browser's station picker; the
@@ -220,8 +220,14 @@ export const SYSTEM_PROMPT =
   'Whenever you give a schedule answer (times, durations, first or last train, a weekday or date), ' +
   'add one short sentence that holiday schedules are not modelled and the person should confirm on amtrak.com. ' +
   'If a station name is ambiguous, say which stations matched and which one you used or ask. ' +
-  'Keep answers to a few sentences. ' +
-  'Reply in plain text only — no markdown, no asterisks, no bullet points.'
+  'Keep answers short. Reply in plain text only — no markdown, no asterisks, no bullet points. ' +
+  // The page (index.html renderAnswer) turns these lines into a layout: line 1
+  // is the headline, train lines become rows, a last holiday line a footnote.
+  'When you list trains, use separate lines: first one short headline line with the day, the date, ' +
+  'the two stations and "Eastern time"; then one line per train in exactly this form: ' +
+  '"5:44 AM → 9:15 AM · Northeast Regional 66 · 3h 31m", adding " · " and a short note only when ' +
+  'something matters (for example "arrives next day" or "starts the evening before"); ' +
+  'then the holiday sentence as its own last line. Otherwise answer in one or two short sentences.'
 
 // SYSTEM_PROMPT plus today's date. The model has no clock, and "next
 // Thursday" or "this Saturday" can't be turned into a date without one. It is
