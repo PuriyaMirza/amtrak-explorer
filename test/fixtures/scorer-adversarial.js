@@ -484,5 +484,35 @@ export const SCORER_ADVERSARIAL_FIXTURES = [
     "answer": "The fastest is Southwest Chief 3 at 43h57m.",
     "pass": false,
     "note": "declineConstraint reads the same pattern as refusalExpected."
+  },
+  {
+    "check": "refusalExpected",
+    "answer": "No. The Cardinal (train 50) stops at both Washington Union Station and New York Penn Station, but it doesn't allow boarding at Washington. The schedule data says this applies on any date, and it found no usable Cardinal from Washington to New York. The Cardinal does run the other way, from New York toward Washington. I can check other direct trains from Washington to New York if you'd like.\n\nHoliday schedules are not modelled, so please confirm on amtrak.com.",
+    "pass": true,
+    "note": "The real prompt-v5 answer to cardinal-no-boarding-was-nyc (eval run 2026-10-26, 40/41). A correct, grounded no that scorer v2 missed: it says no three ways ('No.', \"doesn't allow boarding\", 'no usable Cardinal') and v2 recognised none of them. The motivating false negative for scorer 3."
+  },
+  {
+    "check": "refusalExpected",
+    "answer": "The Cardinal doesn't allow boarding at Washington, so there is no usable Cardinal from Washington to New York.",
+    "pass": true,
+    "note": "Boarding restriction (pickup_type = 1) phrased without a leading 'No.' \u2014 each of the two new phrasings has to carry the match on its own."
+  },
+  {
+    "check": "refusalExpected",
+    "answer": "No, that trip is not possible as a single train.",
+    "pass": true,
+    "note": "Bare sentence-initial 'No,' (already matched via 'not possible' in v1; pinned so the new anchored alternative cannot regress it)."
+  },
+  {
+    "check": "refusalExpected",
+    "answer": "Yes, the Cardinal 50 allows boarding at Washington and leaves at 7:09 PM.",
+    "pass": false,
+    "note": "Guard for the new 'doesn't allow' alternative: plain 'allows' is not a refusal. Answers the question (wrongly, but that is what noneOf catches), so it must not read as a refusal."
+  },
+  {
+    "check": "refusalExpected",
+    "answer": "Nonstop service is offered by Acela 2150, which leaves at 6:00 AM.",
+    "pass": false,
+    "note": "Guard for the bare-'No' anchor: a sentence starting with 'Nonstop' must not match. The alternative requires 'No' followed by a comma or period."
   }
 ]

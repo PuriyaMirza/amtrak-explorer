@@ -288,9 +288,10 @@ text goes back to the model as the tool result so it can correct itself.
     stop_id as `home_station`)
   - **v5**: answer layout: a headline line, one `dep → arr · train · duration [· note]`
     line per train, then the holiday line. `renderAnswer` in index.html turns those lines
-    into rows (escaped); other answers stay one paragraph. Current; needs an eval run
+    into rows (escaped); other answers stay one paragraph. Current; evaluated 2026-10-26
+    (40/41 under scorer 2; the single failure was a scorer bug, fixed in scorer 3)
 
-**System prompt rules (v4)** (if you reword them, update `eval/cases.js`, which looks
+**System prompt rules (v5)** (if you reword them, update `eval/cases.js`, which looks
 for some of these phrases)
 - Only state stations, routes, train numbers, times and durations that a tool returned;
   never invent a station, schedule or price.
@@ -471,16 +472,34 @@ blocked on having enough data to say anything honest.
 - **Scorer v2 re-run** (2026-10-24, prompt v3, scorer 2): **40/40 (100%)**, schedule 13/13.
 - **Prompt v4** (2026-10-24, home station, scorer 2): **41/41 (100%)**, schedule 14/14
   (new case `no-origin-uses-home-station`).
+- **Prompt v5** (2026-10-26, answer layout, scorer 2): **40/41 (98%)**, schedule 13/14. The one
+  failure (`cardinal-no-boarding-was-nyc`) was the **third scorer false negative**, not a model
+  bug: the answer refused correctly three ways ("No.", "doesn't allow boarding", "no usable
+  Cardinal") and scorer 2 recognised none of them. v5 changed answer *wording*, and the wording
+  drifted outside a heuristic built from v1-era phrasing.
+- **Scorer 3** (2026-10-26): those three phrasings, in a **separate** `REFUSAL_PATTERN_EXPECT`
+  read only by `refusalExpected` / `declineConstraint`. `REFUSAL_PATTERN_V1` and `_LOOSE` are
+  unchanged, because `noRefusal` falls back to `_LOOSE` when a scope disclaimer is cut — so
+  widening `_LOOSE` would have made the "must NOT refuse" direction stricter too. Against the
+  frozen v1 scorer over all 80 adversarial fixtures: 19 fixed, **0 regressed**. No eval row at
+  scorer 3 yet (needs a paid re-run; only that one case can change).
+
+**Three of the four recorded eval "failures" so far have been scorer bugs, not model bugs.**
+Read the answer text before believing a failure — and treat the evaluator as something that
+drifts and needs its own tests (`test/score-adversarial.test.js`, 80 fixtures).
 
 ---
 
 ## Open items for the next session
 
-**Start with `docs/HANDOFF.md`**: it has the current state and the two items found in
-the live test (the "Searched for: undefined" UI bug; the default-origin vs conversation-memory decision).
+**Start with `docs/HANDOFF.md`**: it has the current state and what to do first (record a
+scorer-3 eval row; give the prompt the current New York time so "when is the next train"
+works, which is prompt v6).
 
 - [x] **(a) Post-PR-4 eval run.** Done (38/40, 2026-10-24); both failures were scorer bugs, fixed in
-      scorer v2. Optional follow-up: re-run `npm run eval` to record a scorer-v2 row.
+      scorer v2. Scorer-2 rows recorded since (v3 40/40, v4 41/41, v5 40/41).
+- [ ] **(a2) Record a scorer-3 eval row.** `npm run eval` after the scorer 3 change (2026-10-26).
+      Offline checks say the one v5 failure now passes; the row is for the log, not a fix.
 - [x] **(b) Supabase `amtrak-explorer` project:** deleted 2026-10-24 after the 13 snippets were
       saved to `sql/snippets_from_supabase.sql`. (`bike-forecast` still lives on Supabase; don't touch it.)
 - [ ] **(c) Inert RLS on `events`.** Decide: drop it or keep it (see Known cleanup items).
