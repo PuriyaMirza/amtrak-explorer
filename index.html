@@ -2,7 +2,11 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Amtrak Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,16 +21,36 @@
     </div>
   </div>
 
-  <h1>Amtrak Explorer</h1>
-  <input id="q" type="text" placeholder="Search stations and routes…" autocomplete="off" />
-  <div id="results"></div>
+  <header>
+    <p class="eyebrow">AMTRAK GTFS · DIRECT TRAINS</p>
+    <h1>Amtrak Explorer</h1>
+    <p class="lede">Look up stations and routes, or ask about train times in plain English.</p>
+  </header>
 
-  <h2 class="ask-heading">Ask in plain English</h2>
-  <form id="ask-form">
-    <input id="ask-input" type="text" placeholder="e.g. what trains go through Chicago?" autocomplete="off" />
-    <button id="ask-button" type="submit">Ask</button>
-  </form>
-  <div id="ask-results"></div>
+  <section class="card">
+    <div class="card-head">
+      <span class="card-num">01</span>
+      <h2 class="card-title">Search</h2>
+      <p class="card-desc">Stations and routes by name.</p>
+    </div>
+    <hr class="rule">
+    <input id="q" type="text" placeholder="Search stations and routes…" autocomplete="off" aria-label="Search stations and routes" />
+    <div id="results"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="card-num">02</span>
+      <h2 class="card-title">Ask in plain English</h2>
+      <p class="card-desc">Direct trains, times and round trips. Times are US Eastern; no fares or live delays.</p>
+    </div>
+    <hr class="rule">
+    <form id="ask-form">
+      <input id="ask-input" type="text" placeholder="e.g. first train to Boston on Friday?" autocomplete="off" aria-label="Your question" />
+      <button id="ask-button" type="submit">Ask</button>
+    </form>
+    <div id="ask-results"></div>
+  </section>
 
   <script type="module">
     import { logEvent, deviceId, sessionId } from './events.js'
@@ -160,7 +184,7 @@
         sections.push('<ul>' + routeNames.map((name, i) =>
           `<li class="clickable" data-query-id="${queryId}" data-group="route"
                data-id="${name}" data-label="${name}" data-position="${i}">
-            ${name} <span class="meta">${kindByName[name]}</span>
+            ${name} <span class="pill">${kindByName[name]}</span>
           </li>`
         ).join('') + '</ul>')
       } else {
@@ -267,10 +291,10 @@
         // that makes the eval work possible later.
         if (data.toolCalls?.length) {
           // One line per tool call; formatToolCall knows each tool's input shape.
-          parts.push('<p class="status">' +
-            data.toolCalls.map(c => escapeHtml(formatToolCall(c))).join('<br>') + '</p>')
+          parts.push('<p class="lookups"><span>' +
+            data.toolCalls.map(c => escapeHtml(formatToolCall(c))).join('<br>') + '</span></p>')
         } else {
-          parts.push('<p class="status">Answered without searching.</p>')
+          parts.push('<p class="lookups"><span>Answered without searching.</span></p>')
         }
 
         askResults.innerHTML = parts.join('')
