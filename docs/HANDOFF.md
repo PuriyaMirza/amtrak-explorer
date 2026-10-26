@@ -1,6 +1,6 @@
 # Handoff: next session
 
-Written 2026-10-26, after the prompt-v5 eval run and the scorer 3 fix.
+Written 2026-10-26, after the prompt-v5 eval run, the scorer 3 fix, and the renderAnswer test.
 Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` (decisions).
 
 ## Where things stand
@@ -51,19 +51,47 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 - **The scorer-3 re-run came in 41/41** (2026-10-26), matching the offline prediction. The other
   40 cases scored identically under scorer 2 and scorer 3, which is the live evidence that the
   three new phrasings widened nothing. **Prompt v5 is a genuine 41/41.**
+- **The v5 layout parses correctly** (checked 2026-10-26, one live `askQuestion` call for
+  "first three trains to Providence this Thursday"). The model produced the v5 contract exactly
+  and `renderAnswer` found it: headline → `.answer-lead`, **3** `.train-row`s, holiday line →
+  `.answer-note`, everything escaped. The same answer also confirmed the home station (no origin
+  given → left from New York Penn and said so), the resolved date, the Eastern note, and the
+  service-day rule surfacing as "starts the evening before" on train 66 at 5:44 AM.
+  **Still unchecked: the CSS** (row alignment, pills, spacing, dark/light). That needs eyes on
+  the deployed page; it is cosmetic, not functional.
+- **`test/render-answer.test.js`** now pins that contract. It **lifts** `renderAnswer` out of
+  `index.html` rather than copying it, so it tests the shipping code and follows edits; if the
+  lift fails (function moved or renamed) the test fails loudly instead of passing on a stale
+  copy. Fixture = the real v5 answer above. Verified by mutation: changing `isTrain`'s `→` to
+  `->` fails 2 of the 5 tests. This closes the blind spot that made v5 risky — **the evals score
+  answer text, never the rendered page**, so a prompt change could hold 41/41 while the page
+  silently fell back to one paragraph.
 
 ## Do first (next session), in order
 
-1. **Live check of the v5 layout** (still never done — the evals score answer *text*, not the
-   page): ask "first three trains to Providence this Thursday" on the live site. Expect a
-   headline, 3 rows, a footnote. If the model ignores the format, the page falls back to one
-   paragraph (not broken, just unformatted) and the prompt needs firmer wording.
-2. **"Next train" needs the current time** (carried over, the next real feature). "When is
+1. **"Next train" needs the current time** — prompt **v6**, the next real feature. "When is
    the next train to New York" got "I don't know the current time": `systemPromptFor` gives
    today's date but not the time. Fix: add the current New York time the same way (server clock,
    never the request — the same injection guard as `today`), plus an eval case that checks a time
    window or `departAfter` in the tool input, not a fixed train. Prompt change → **v6**, then
    `npm run eval` (the v5/scorer-3 41/41 is the baseline it has to beat or hold).
+
+   Two decisions to make first, which is why this was left for a fresh session:
+   - **What the eval case asserts.** "The next train" changes by the hour, so it cannot expect a
+     fixed train number or time. Options: assert `departAfter` appears in the `find_trains` tool
+     input (structural, stable, cheap), or assert the answer's first time is later than a
+     computed "now" (closer to what a user cares about, more moving parts). The structural check
+     is the safer first version; `toolQueriesInclude` already does something similar.
+   - **Whether the time goes in the prompt or the tool.** The prompt is the smaller change and
+     matches how `today` works. Putting a `now` into `find_trains` would let the tool filter
+     directly, but that is a tool-contract change on top of a prompt change — two unknowns.
+   Non-negotiable either way: the time comes from the **server clock in New York**, never from
+   the request, exactly like `today` in `runTool`. A request-supplied time is a prompt-injection
+   vector and `test/home-station.test.js` is the pattern for guarding it.
+
+2. **Eyeball the deployed page** (cosmetic only now — the parse is verified and tested): ask
+   "first three trains to Providence this Thursday" on the live site and confirm the rows line
+   up and the styling looks right. Behind Vercel SSO, so it has to be you in a browser.
 
 ## Small open items
 
@@ -73,7 +101,12 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
   shape the ask answer guards against. One small PR: run those values through `escapeHtml`.
 - **Inert RLS on `events`:** decide drop vs keep (zero policies; functions connect as owner).
 - **Write-up #1 (roadmap D), Puriya's to write.** Raw material:
-  - `eval/RESULTS.md`: 27 → 38 → 40 → 41 → 40/41 (v5; the dip was the scorer, not the model).
+  - `eval/RESULTS.md`: 27 → 38 → 40 → 41 → 40/41 → **41/41** (the v5 dip was the scorer, not
+    the model). Tell it as "the evaluator was wrong three times out of four", not as "27 → 41":
+    the aggregate says a prompt improved, the scorer story says you understand measurement.
+  - **The evals score answer text, never the rendered page.** `test/render-answer.test.js` exists
+    because 41/41 could not have caught a broken `renderAnswer`. Knowing what your eval does
+    *not* cover is part of the methodology.
   - The Cardinal baseline answer: "Yes" to an impossible WAS→NYP trip, an ungrounded
     answer that sounds right.
   - Scorer false negatives caught by reading failures; a narrow regex fix broke ~10 other
