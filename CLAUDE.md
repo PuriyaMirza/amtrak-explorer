@@ -107,7 +107,9 @@ eval/runner.js      runCases(), chooseMode() — the loop, testable with a fake 
 eval/results.js     formats/appends rows of eval/RESULTS.md
 eval/run.js         CLI: `npm run eval`
 eval/RESULTS.md     run log, one row per eval run (header explains columns)
-test/               `npm test` (node:test, no network)
+test/               `npm test` (node:test, no network). `render-answer.test.js` lifts
+                    renderAnswer out of index.html and pins the v5 line format — the evals
+                    score answer text, not the page, so this is the only guard on the UI
 sql/                events table, reconstructed from the live DB (2026-10-23)
 ```
 
