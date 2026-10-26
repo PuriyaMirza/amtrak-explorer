@@ -4,6 +4,7 @@ import {
   scoreCase,
   REFUSAL_PATTERN_V1,
   REFUSAL_PATTERN_LOOSE,
+  REFUSAL_PATTERN_EXPECT,
   SCORER_VERSION,
   withoutHolidayCaveats,
   withoutScopeDisclaimers,
@@ -204,8 +205,41 @@ const WEEKEND_ANSWER =
   'Sunday: Acela 2250 leaves Philadelphia at 6:00 PM, so you get about 47 hours there. ' +
   "Holiday schedules are not modelled, so please confirm on amtrak.com. I can't see fares or seat availability."
 
-test('SCORER_VERSION is 2 (first change after the original scorer)', () => {
-  assert.equal(SCORER_VERSION, 2)
+test('SCORER_VERSION is 3 (refusalExpected phrasings from the prompt-v5 run)', () => {
+  assert.equal(SCORER_VERSION, 3)
+})
+
+// Scorer 3. The real prompt-v5 answer to cardinal-no-boarding-was-nyc: a
+// correct, grounded refusal that says no three ways, none of which scorer v2
+// recognised (eval run 2026-10-26, the single failure in 40/41).
+const CARDINAL_V5_ANSWER =
+  'No. The Cardinal (train 50) stops at both Washington Union Station and New York Penn Station, ' +
+  "but it doesn't allow boarding at Washington. The schedule data says this applies on any date, " +
+  'and it found no usable Cardinal from Washington to New York. The Cardinal does run the other ' +
+  "way, from New York toward Washington. I can check other direct trains from Washington to New " +
+  "York if you'd like.\n\nHoliday schedules are not modelled, so please confirm on amtrak.com."
+
+test('refusalExpected: the real cardinal-no-boarding-was-nyc v5 answer passes (scorer 3)', () => {
+  // v2 missed it; the three new phrasings are what catch it.
+  assert.doesNotMatch(CARDINAL_V5_ANSWER, REFUSAL_PATTERN_LOOSE)
+  assert.match(CARDINAL_V5_ANSWER, REFUSAL_PATTERN_EXPECT)
+  assert.equal(score({ refusalExpected: true }, { answer: CARDINAL_V5_ANSWER }).pass, true)
+})
+
+// The structural guarantee behind scorer 3: the new phrasings live in a pattern
+// that noRefusal never reads, so widening "must refuse" cannot make the
+// "must NOT refuse" direction stricter. A correct answer that happens to open
+// with "No." or mention a boarding restriction still passes noRefusal.
+test('noRefusal is unaffected by the scorer-3 phrasings', () => {
+  const answers = [
+    'No. Train 86 leaves New York Penn at 6:00 AM Eastern and arrives at 10:05 AM.',
+    "Train 50 doesn't allow boarding at Washington, but Northeast Regional 158 leaves at 7:20 AM.",
+  ]
+  for (const answer of answers) {
+    assert.match(answer, REFUSAL_PATTERN_EXPECT) // the refuse direction sees it
+    assert.doesNotMatch(answer, REFUSAL_PATTERN_V1) // noRefusal's pattern does not
+    assert.equal(score({ noRefusal: true }, { answer }).pass, true)
+  }
 })
 
 test('refusalExpected: the real anchorage-refusal answer passes (plural "no trains")', () => {

@@ -10,7 +10,11 @@ import { failureTypeOf } from './taxonomy.js'
 //       only + "unable to"/"couldn't" + scope-disclaimer stripping in noRefusal.
 //       Rule: never wrong where v1 was right (test/score-adversarial.test.js)
 //       (motivating false negatives: anchorage-refusal, weekend-generic-philadelphia)
-export const SCORER_VERSION = 2
+//   3 = REFUSAL_PATTERN_EXPECT for refusalExpected/declineConstraint only:
+//       bare sentence-initial "No.", "doesn't allow", "no usable/boardable".
+//       noRefusal is untouched by construction (it never reads this pattern).
+//       (motivating false negative: cardinal-no-boarding-was-nyc, prompt v5)
+export const SCORER_VERSION = 3
 
 // Heuristic, not exhaustive — built from refusal phrasing actually observed
 // from the live model (e.g. "can't take a train", "no matching Amtrak
@@ -34,6 +38,31 @@ export const REFUSAL_PATTERN_LOOSE = new RegExp(
     'no\\s+(direct\\s+)?(train|route|rail)',
     'no\\s+(?:direct\\s+)?(?:trains?|routes?|rail|stations?)(?!\\s+(?:after|before|on|during|until|past|between|stop))',
   ),
+  'i',
+)
+
+//   - refusalExpected / declineConstraint ALSO read REFUSAL_PATTERN_EXPECT,
+//     which is LOOSE plus three phrasings that v5 answers actually used and
+//     v2 missed (case cardinal-no-boarding-was-nyc, scorer v2):
+//       "No. The Cardinal ... doesn't allow boarding ... found no usable Cardinal"
+//     Why a THIRD pattern instead of widening LOOSE: noRefusal falls back to
+//     LOOSE whenever a scope disclaimer was cut (see the noRefusal branch), so
+//     widening LOOSE would also change the "must NOT refuse" direction, where
+//     every extra phrase risks failing a correct answer. Keeping the additions
+//     here means noRefusal behavior is unchanged by construction.
+//
+//     Each addition is deliberately narrow:
+//       - a bare sentence-initial "No." / "No," (the v5 answer opens with it).
+//         Anchored to start-of-string or after sentence punctuation, so it
+//         cannot fire inside a word or mid-clause.
+//       - "doesn't / does not allow" (boarding restrictions: pickup_type = 1).
+//         The verb list in V1 stops at serve/have/connect.
+//       - "no usable / no boardable <anything>", NOT a general "no <noun>":
+//         a general form would read "no usable" and "no Acela" alike and is
+//         the kind of over-generalization that cost a pass rate before.
+const REFUSAL_EXTRA_EXPECT = String.raw`(?:^|[.!?]\s+)no[,.]|\b(?:doesn['’]?t|does\s+not)\s+allow\b|\bno\s+(?:usable|boardable)\b`
+export const REFUSAL_PATTERN_EXPECT = new RegExp(
+  `${REFUSAL_PATTERN_LOOSE.source}|${REFUSAL_EXTRA_EXPECT}`,
   'i',
 )
 
@@ -172,11 +201,11 @@ export function scoreCase(caseDef, { answer, toolCalls }) {
   }
 
   if (checks.refusalExpected) {
-    add('refusalExpected', 'refusalExpected', REFUSAL_PATTERN_LOOSE.test(answer || ''))
+    add('refusalExpected', 'refusalExpected', REFUSAL_PATTERN_EXPECT.test(answer || ''))
   }
 
   if (checks.declineConstraint) {
-    add('declineConstraint', 'declineConstraint', REFUSAL_PATTERN_LOOSE.test(answer || ''))
+    add('declineConstraint', 'declineConstraint', REFUSAL_PATTERN_EXPECT.test(answer || ''))
   }
 
   // The mirror image of refusalExpected: the answer must NOT read as a

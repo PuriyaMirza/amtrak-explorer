@@ -50,6 +50,13 @@ directly comparable. Existing rows are untouched and are implicitly scorer v1.
   Motivating false negatives, both found in the post-PR-4 run (prompt v3):
 \`anchorage-refusal\` and \`weekend-generic-philadelphia\`. Known gaps are listed
   in test/fixtures/scorer-adversarial.js (\`knownLimitation\`).
+- **v3**: \`refusalExpected\` / \`declineConstraint\` read one more pattern
+  (\`REFUSAL_PATTERN_EXPECT\`): a bare sentence-initial "No." / "No,",
+  "doesn't / does not allow" (boarding restrictions) and "no usable / no boardable".
+  \`noRefusal\` never reads that pattern, so the "must NOT refuse" direction is
+  unchanged by construction. Motivating false negative, found in the prompt-v5 run:
+  \`cardinal-no-boarding-was-nyc\`, where a correct grounded answer said no three
+  ways and v2 recognised none of them.
 
 | Date (UTC) | Mode | Model | Prompt | Pass | By category | Failure types | Failed cases |
 |---|---|---|---|---|---|---|---|

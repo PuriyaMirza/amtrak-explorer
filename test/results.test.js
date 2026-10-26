@@ -12,6 +12,9 @@ const base = {
   mode: 'local',
   model: 'claude-sonnet-5-5',
   promptVersion: 'v1',
+  // Pinned, not SCORER_VERSION: these tests check the row FORMAT, so they must
+  // not break every time the scorer is bumped.
+  scorerVersion: 2,
   outcomes: [
     outcome('a', 'easy', true),
     outcome('b', 'easy', true),
