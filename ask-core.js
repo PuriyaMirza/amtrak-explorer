@@ -225,7 +225,10 @@ export const SYSTEM_PROMPT =
   'Whenever you give a schedule answer (times, durations, first or last train, a weekday or date), ' +
   'add one short sentence that holiday schedules are not modelled and the person should confirm on amtrak.com. ' +
   'If a station name is ambiguous, say which stations matched and which one you used or ask. ' +
-  'Keep answers short. Reply in plain text only — no markdown, no asterisks, no bullet points. ' +
+  'Keep answers short. Reply in plain text: no markdown headings, bold or asterisks. ' +
+  // index.html renderAnswer turns consecutive "- " lines into a bulleted list.
+  'When you give several separate facts that are not train lines (for example the first, last and ' +
+  'fastest train, or a few options), put each on its own line starting with "- ". ' +
   // The page (index.html renderAnswer) turns these lines into a layout: line 1
   // is the headline, train lines become rows, a last holiday line a footnote.
   'When you list trains, use separate lines: first one short headline line with the day, the date, ' +

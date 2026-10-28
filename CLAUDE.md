@@ -298,7 +298,9 @@ text goes back to the model as the tool result so it can correct itself.
     (40/41 under scorer 2; the single failure was a scorer bug, fixed in scorer 3)
   - **v6**: the current New York time (`timeInNewYork`, server clock) next to today's date,
     plus a rule: "next train" questions call `find_trains` with today's date and
-    `departAfter` = now. Current. **Not yet evaluated**: run `npm run eval` (during the day,
+    `departAfter` = now. Also: separate facts that aren't train rows go on `- ` lines, which
+    `renderAnswer` shows as a bulleted list (v5 forbade bullets; the model used them anyway).
+    Current. **Not yet evaluated**: run `npm run eval` (during the day,
     see the `next-train-uses-current-time` case) before treating it as done.
 
 **System prompt rules (v6)** (if you reword them, update `eval/cases.js`, which looks
@@ -316,8 +318,9 @@ for some of these phrases)
 - **Home station** (v4): no departure station given → leave from the home station and say
   so ("from New York Penn Station"). Added per request by `systemPromptFor`, like today's date.
 - Direct trains only; no fares, live delays, seat availability or booking. Say so rather than guess.
-- Ambiguous station names: say which matched. Plain text only (no markdown). Train lists use
-  the v5 line format above (the page parses it); otherwise one or two short sentences.
+- Ambiguous station names: say which matched. Plain text (no markdown headings, bold or
+  asterisks). Train lists use the v5 line format above (the page parses it); several separate
+  facts go on `- ` lines (v6, shown as bullets); otherwise one or two short sentences.
 
 ### planWeekend (weekend.js)
 
