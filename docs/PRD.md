@@ -143,7 +143,13 @@ Browse screen growth. All three were requested; the order and details get decide
   MapLibre **6.13.0** (v6 is ES-module only: `dist/maplibre-gl.mjs`, imported from jsDelivr; pinned
   to a release three weeks old rather than the newest), Positron style. Train stations only
   (route_type 2), clustered below zoom 8, home station as a lavender pin that follows the picker,
-  pin click → popup (text only) + the B3 header. Map clicks log as `click` with `result_group = 'map'`.
+  pin tap → a popup **with a preview** (trains today, fastest, first – last, up to 3 routes; same
+  `/api/destination` numbers as B3), no scrolling. Cluster tap → a popup listing its stations A–Z
+  (up to 50, "+N more"), each a dropdown that loads its preview when opened, plus Zoom in.
+  Previews are cached per home station for the visit; a failed one retries. Popups open on a fixed
+  side (previews above, lists below) and the map slides so they fit; the phone map is 420px.
+  Opening a preview logs `click` with `result_group = 'map'`. (Changed 2026-10-28 at Puriya's
+  request: the first version opened the B3 header in Search, which meant scrolling up.)
   Lazy-loaded on scroll; a CDN or style failure only replaces this card with a message.
 - **Weekend finder:** pick a weekend and see destinations with Fri-out/Sun-back train pairs. Reuses PR 4's `planWeekend`.
 

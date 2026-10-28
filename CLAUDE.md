@@ -88,8 +88,11 @@ stations.js         listStations(sql) — every TRAIN station (route_type 2) wit
                     names dropped, our display names. One fixed query, no request input
 map.js              the station map (card 03): MapLibre GL JS 6.13.0 (ES module, CDN, pinned)
                     + OpenFreeMap Positron tiles, no API key. Loaded lazily on scroll;
-                    clustered pins, home pin highlighted, pin click → B3 header. Names
-                    only via Popup.setText (never HTML). stationsGeoJSON() is pure/tested
+                    clustered pins, home pin highlighted. Pin tap → popup with a preview
+                    (trains today, fastest, first–last, routes) from /api/destination;
+                    cluster tap → its stations as <details> dropdowns, each loading the
+                    same preview when opened, + Zoom in. Popups built with textContent +
+                    setDOMContent (never HTML). previewModel()/stationsGeoJSON() pure/tested
 home-station.js     DEFAULT_HOME_STATION (NYP) + load/saveHomeStation(localStorage) for
                     the picker; shared by browser and ask-core.js (pure; unit-tested)
 tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown

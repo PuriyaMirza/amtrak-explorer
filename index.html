@@ -59,7 +59,7 @@
     <div class="card-head">
       <span class="card-num">03</span>
       <h2 class="card-title">Map</h2>
-      <p class="card-desc">Every Amtrak train station. Tap a pin for trains from your station today; tap a cluster to zoom in.</p>
+      <p class="card-desc">Every Amtrak train station. Tap a pin for trains from your station today; tap a numbered cluster to list its stations.</p>
     </div>
     <hr class="rule">
     <div id="map" class="map" role="region" aria-label="Map of Amtrak stations"></div>
@@ -346,8 +346,9 @@
 
     // ---- Map (03) ----
     // map.js loads MapLibre from the CDN only when the card scrolls near the
-    // screen, so the page never waits for it. A pin click opens the destination
-    // header (above, in Search) for that station. Any failure stays in this card.
+    // screen, so the page never waits for it. Tapping a pin shows a preview of
+    // trains from the home station in the map popup; tapping a cluster lists its
+    // stations as dropdowns with the same preview. Any failure stays in this card.
     const mapEl = document.getElementById('map')
     const mapStatus = document.getElementById('map-status')
     let stationMap = null
@@ -363,9 +364,17 @@
             if (!res.ok) throw new Error(data.error || `Stations failed (${res.status})`)
             return data.stations
           },
-          onPick: (id, name) => {
+          // The preview in the map popup: same endpoint and numbers as the B3
+          // header, from the home station, today. Only stop_ids go in the URL.
+          loadPreview: async (stopId) => {
+            const params = new URLSearchParams({ to: stopId, from: homeStation.stop_id })
+            const res = await fetch(`/api/destination?${params}`)
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || `Lookup failed (${res.status})`)
+            return data
+          },
+          onOpen: (id, name) => {
             logEvent('click', { target_type: 'station', target_id: id, target_label: name, result_group: 'map' })
-            showDestination(id)
           },
         })
       } catch (err) {
