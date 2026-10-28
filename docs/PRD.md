@@ -133,7 +133,120 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
 
 Browse screen growth. All three were requested; the order and details get decided when this phase ships.
 - **Filters:** time of day, route.
-- **Map:** station pins from `stops.stop_lat`/`stop_lon`.
+- **Map:** station pins from `stops.stop_lat`/`stop_lon`. **Decided 2026-10-28 (Puriya): MapLibre GL JS + OpenFreeMap tiles.**
+  Free, with no API key or registration and no stated limit on views ([openfreemap.org](https://openfreemap.org), checked 2026-10-28),
+  so there's no secret in the browser. Loaded from a CDN `<script>` tag pinned to an exact version (no build step). Keep the
+  attribution MapLibre adds automatically. Rejected: Leaflet + CARTO Positron, because CARTO raster tiles have
+  required an API key since 2026-09-25 ([CARTO FAQ](https://docs.carto.com/faqs/carto-basemaps)). Station names in pin popups
+  go through `escapeHtml`. Risk: OpenFreeMap is donation-funded with no SLA; if it goes away, swap the style URL (tiles are separate from MapLibre).
 - **Weekend finder:** pick a weekend and see destinations with Fri-out/Sun-back train pairs. Reuses PR 4's `planWeekend`.
 
 Design implication for this phase: keep `schedule.js` and `planWeekend` free of AI-specific shapes, so the browse UI can call them through a plain `/api/` endpoint later.
+
+### 7.1 Browse components from the Stamp blues sheet
+
+**Added 2026-10-28, approved by Puriya.** Source: Figma file `z1KG6ozWc2BW0Eg6SqX5QK`, frame
+`213:555` ("Proposed components · Stamp blues"). That sheet was drawn for the old
+`amtrak-trip-planner` M3–M5 plan (static JSON, fare log), so most of it can't be backed by this
+repo's data. PR #15 built none of its components. Three of them fit today's data once the parts
+the data can't support are removed. Each gets built against what the data actually has, not the mockup.
+
+| Sheet # | Component | Kept | Dropped (no data) |
+|---|---|---|---|
+| 03 | Trip option card | Out/back legs, train numbers, durations, hours at destination, Amtrak link | Fare range and "last seen" pill, `$$` price tier |
+| 05 | Overnight leg timeline | Stop list with times, +N day badge, hours-lost note, duration pill | "Sleeper available" pill |
+| 07 | Destination detail header | Station name and id, fastest and median duration, trains per day, routes, Amtrak link | Region label ("MID-ATLANTIC"), route distance (unless the open question below says yes), "Show on map" (until the Map ships) |
+
+Not taken from the sheet, and why: 01 travel window (holiday dots need `calendar_dates`),
+02 smart filters (regions; the time/route filters above already cover the rest), 04 fare
+provenance and 06 fare log (no fares), 08 data freshness (no static rebuild to date).
+
+**Rules for all three**
+- **No AI in the path.** Plain `/api/` endpoints over `schedule.js` / `weekend.js`, thin like
+  `api/search.js`. No new query logic inside an endpoint.
+- **Times are Eastern.** Show "ET" on every time. A stop whose `stops.stop_timezone` is not
+  `America/New_York` gets a visible "times shown in Eastern" note (Figma 05 shows Chicago at
+  "9:45a" with no zone, which would be wrong).
+- **Holiday caveat** on every card that shows a schedule: one footnote line, the same wording as `schedule.js`.
+- **Escape everything.** Every value from the database (`stop_name`, `route_long_name`, train
+  numbers) goes through `escapeHtml` before reaching `innerHTML` or a `data-*` attribute. This
+  also closes the open "unescaped DB text in search results" item for the browse screen.
+- **Stamp blues tokens only** (`--surface-1..4`, `--accent-1..2`, Chip, Pill); no new colours.
+- **Ask-box answers are unchanged.** These are browse-screen components. Prompt stays v5, no eval run needed.
+
+#### B1: Trip option card (sheet 03)
+
+Depends on the Weekend finder endpoint (`/api/weekend` → `planWeekend`), so it ships with or right after it.
+
+- One card per `planWeekend` pair: destination name, route pill, an **OUT** row and a **BACK** row
+  (date, `depart → arrive`, train number and route, duration, `+1 day` pill when
+  `arriveDayOffset > 0`), then "Time in <city>" with `hoursAtDestination` and a bar
+  (scale 0 → longest stay in the result set).
+- `hoursAtDestination` is taken from `planWeekend` as is and **never recomputed in the browser**
+  (it already handles overnight outbounds and DST).
+- Button: "Check fares on Amtrak.com →" linking to `https://www.amtrak.com/` (see open question 2).
+- `planWeekend` `notes` (resolved dates, DST) render as small text under the card list.
+
+Acceptance criteria
+- A known pair (verified with a direct SQL check, noted in the test) renders the same trains,
+  times and hours as `planWeekend` returns.
+- An overnight outbound shows `+1 day`, and its hours match `planWeekend` exactly.
+- A `stop_name` containing `<img onerror>` renders as text (test).
+- `npm test` passes. Render tests lift the render function out of `index.html`, as
+  `test/render-answer.test.js` does.
+
+#### B2: Overnight leg timeline (sheet 05)
+
+Needs one new fixed query: the stops of one trip between two stations.
+
+- `tripStops(sql, { tripId, from, to })` in `schedule.js`: rows of `stop_times` for that trip
+  with `stop_sequence` between the boarding and alighting stops, joined to `stops`
+  (`stop_name`, `stop_timezone`). Returns plain data: `[{ stopId, name, time, dayOffset, timezone }]`.
+  `dayOffset` uses the same service-day rule as `findDirectTrains` (offset counted from the
+  physical departure day, not the service day; see CLAUDE.md "service day vs physical day").
+- `findDirectTrains` must expose `tripId` (and its service date) on each train so the UI can ask
+  for the stops. This is an additive field and doesn't affect the ask box's tool output contract.
+  Check that the eval scorer ignores it.
+- UI: expands from a B1 leg or a search result. Shows origin and destination with full times,
+  intermediate stops as smaller rows, and a `+N day` pill on the first stop past midnight.
+  More than 8 intermediate stops collapse to "N more stops".
+- When the leg is part of a B1 card and arrives the next day, show a note: "Arrives next
+  day. Time in <city> is <hoursAtDestination>." The number comes from `planWeekend`.
+
+Acceptance criteria
+- Lake Shore Limited (NYP → CHI) fixture: stop order matches `stop_sequence`, Chicago shows `+1 day`,
+  and the "times shown in Eastern" note appears.
+- Train 66 fixture (service day ≠ physical day): offsets are counted from the physical departure day.
+- Fixture tests only, no network. Escaping test as in B1.
+
+#### B3: Destination detail header (sheet 07)
+
+- `destinationSummary(sql, { from, to, date })` in `schedule.js`, built on `findDirectTrains`'
+  **full** train list before the 12/20 cap (the cap would make "trains per day" and "median" wrong
+  on busy pairs). Returns `{ station, fastest, median, trainsPerDay, routes, date }`.
+- `from` defaults to the browser's home station, validated through `resolveHomeStation`
+  (never echoed raw), the same guard the ask box uses.
+- UI: station name, `stop_id`, four stat tiles (fastest, median, trains/day for the date, plus a
+  fourth tile from open question 1 or a 3-tile layout), route pills, "Amtrak.com →" button.
+  The tiles state the date they describe.
+
+Acceptance criteria
+- For NYP → PHL on a fixed date, `trainsPerDay` and `fastest` match a direct SQL count/min (noted in the test).
+- Median is correct for odd and even train counts (unit test).
+- An invalid `from` falls back to NYP (test, mirroring `test/home-station.test.js`).
+
+#### Order and size
+
+Suggested order: **B3 → B1 → B2**. B3 needs only one new function and a thin endpoint, so it's
+the smallest. B1 rides on the Weekend finder endpoint. B2 needs the only new SQL. One PR each.
+Size is a guess: B3 small, B1 small-to-medium, B2 medium.
+
+#### Open questions (decide before building)
+1. **Route distance (sheet 07's 4th tile).** Does the loaded feed have
+   `stop_times.shape_dist_traveled` populated? Not verified. If not, use a 3-tile layout or show
+   "earliest / latest departure" instead. Don't compute straight-line distance and label it route distance.
+2. **Amtrak deep link.** Sheet 03 implies a prefilled booking link. Its URL format isn't
+   verified and could change without notice. Default to the plain homepage link unless a
+   documented format is found.
+3. **Where B3 lives.** Click-through from a search result or a map pin? The Map isn't specced
+   yet; a search-result click is the default.
