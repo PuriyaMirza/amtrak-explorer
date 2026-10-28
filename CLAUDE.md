@@ -84,6 +84,12 @@ weekend.js          planWeekend(sql, {from, to, outDate|outDay, returnDate|retur
 destination.js      destinationSummary(sql, {from, to, date}) — the destination header (B3):
                     fastest, median, trains/day, first/last departure, routes. Built on
                     findDirectTrains (limit 100), no SQL of its own, like weekend.js
+stations.js         listStations(sql) — every TRAIN station (route_type 2) with lat/lon, junk
+                    names dropped, our display names. One fixed query, no request input
+map.js              the station map (card 03): MapLibre GL JS 6.13.0 (ES module, CDN, pinned)
+                    + OpenFreeMap Positron tiles, no API key. Loaded lazily on scroll;
+                    clustered pins, home pin highlighted, pin click → B3 header. Names
+                    only via Popup.setText (never HTML). stationsGeoJSON() is pure/tested
 home-station.js     DEFAULT_HOME_STATION (NYP) + load/saveHomeStation(localStorage) for
                     the picker; shared by browser and ask-core.js (pure; unit-tested)
 tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown
@@ -102,6 +108,7 @@ ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool 
 api/search.js       GET  /api/search?q=   → searchTrains
 api/destination.js  GET  /api/destination?to=&from=&date= → destinationSummary (to = stop_id
                     only; from via resolveHomeStation, else NYP). No AI in the path
+api/stations.js     GET  /api/stations → listStations (no input; edge-cached a day)
 api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
 api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
                     builds clients from env) → askQuestion → logAsk

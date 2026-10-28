@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap">
+  <!-- MapLibre's own styles (controls, popups); pinned like the script in map.js. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.13.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -51,6 +53,17 @@
       <button id="ask-button" type="submit">Ask</button>
     </form>
     <div id="ask-results"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="card-num">03</span>
+      <h2 class="card-title">Map</h2>
+      <p class="card-desc">Every Amtrak train station. Tap a pin for trains from your station today; tap a cluster to zoom in.</p>
+    </div>
+    <hr class="rule">
+    <div id="map" class="map" role="region" aria-label="Map of Amtrak stations"></div>
+    <p id="map-status" class="status" hidden></p>
   </section>
 
   <script type="module">
@@ -103,6 +116,7 @@
         const choose = () => {
           homeStation = saveHomeStation(localStorage, stationFromSearchRow(row))
           homeButton.textContent = homeStation.name
+          stationMap?.setHome(homeStation.stop_id)
           setPickerOpen(false)
           homeButton.focus()
           logEvent('home_station', {
@@ -329,6 +343,44 @@
         destination.replaceChildren()
       }
     })
+
+    // ---- Map (03) ----
+    // map.js loads MapLibre from the CDN only when the card scrolls near the
+    // screen, so the page never waits for it. A pin click opens the destination
+    // header (above, in Search) for that station. Any failure stays in this card.
+    const mapEl = document.getElementById('map')
+    const mapStatus = document.getElementById('map-status')
+    let stationMap = null
+
+    async function startMap() {
+      try {
+        const { initMap } = await import('./map.js')
+        stationMap = await initMap(mapEl, {
+          homeId: homeStation.stop_id,
+          fetchStations: async () => {
+            const res = await fetch('/api/stations')
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || `Stations failed (${res.status})`)
+            return data.stations
+          },
+          onPick: (id, name) => {
+            logEvent('click', { target_type: 'station', target_id: id, target_label: name, result_group: 'map' })
+            showDestination(id)
+          },
+        })
+      } catch (err) {
+        mapEl.hidden = true
+        mapStatus.hidden = false
+        mapStatus.textContent = `The map couldn't load (${err.message}). Search still works.`
+      }
+    }
+
+    new IntersectionObserver((entries, observer) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        observer.disconnect()
+        startMap()
+      }
+    }, { rootMargin: '300px' }).observe(mapEl)
 
     // ---- Natural-language ask ----
     // Posts the question to our own serverless function. That function holds

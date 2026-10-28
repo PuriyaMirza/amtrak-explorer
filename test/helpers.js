@@ -105,6 +105,11 @@ export function mockRes() {
   const res = {
     statusCode: null,
     body: null,
+    headers: {},
+    setHeader(name, value) {
+      res.headers[name.toLowerCase()] = value
+      return res
+    },
     status(code) {
       res.statusCode = code
       return res
