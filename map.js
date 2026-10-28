@@ -56,6 +56,25 @@ const token = (name, fallback) =>
 // Northeast Corridor; past this the popup says how many more and offers Zoom in.
 export const CLUSTER_LIST_LIMIT = 50
 
+// Tap target, in screen pixels from a pin's centre. The visible dot stays small
+// (5 px), but an invisible 22 px circle around it catches the tap: 44 px
+// across, the minimum touch target Apple's guidelines recommend.
+export const TAP_RADIUS = 22
+
+// Of the pins and clusters under a tap, the one whose centre is closest to
+// the finger. Matters where tap circles overlap (stations a few pixels apart).
+// `project` turns [lon, lat] into screen { x, y } (map.project). Pure.
+export function nearestFeature(features, point, project) {
+  let best = null
+  let bestDistance = Infinity
+  for (const f of features) {
+    const p = project(f.geometry.coordinates)
+    const distance = Math.hypot(p.x - point.x, p.y - point.y)
+    if (distance < bestDistance) { best = f; bestDistance = distance }
+  }
+  return best
+}
+
 // The preview shown in a map popup, from one /api/destination response
 // (destination.js). Pure (data in, data out) so test/map.test.js can check it.
 //   { status }                         a one-line message instead of numbers
@@ -182,6 +201,11 @@ export async function initMap(container, {
     id: 'home', type: 'circle', source: 'home',
     paint: { 'circle-color': lavender, 'circle-radius': 8, 'circle-stroke-color': ink, 'circle-stroke-width': 2.5 },
   })
+  // Invisible tap targets (see TAP_RADIUS): drawn fully transparent, but
+  // MapLibre still reports them under a tap, so a near miss still counts.
+  const hit = { 'circle-radius': TAP_RADIUS, 'circle-opacity': 0, 'circle-stroke-opacity': 0 }
+  map.addLayer({ id: 'station-hit', type: 'circle', source: 'stations', filter: ['!', ['has', 'point_count']], paint: hit })
+  map.addLayer({ id: 'home-hit', type: 'circle', source: 'home', paint: hit })
 
   // ---- Popups ----
   // Every piece of text goes in through textContent (see buildPreview).
@@ -228,9 +252,7 @@ export async function initMap(container, {
   }
 
   // Tapping a station: its name, then the preview right in the popup.
-  const openStation = (e) => {
-    const feature = e.features?.[0]
-    if (!feature) return
+  const openStation = (feature) => {
     const { id, name } = feature.properties
     const content = el('div', 'map-pop-body')
     const slot = el('div')
@@ -239,14 +261,10 @@ export async function initMap(container, {
     fillPreview(slot, id)
     onOpen(id, name)
   }
-  map.on('click', 'station', openStation)
-  map.on('click', 'home', openStation)
 
   // Tapping a cluster: every station in it as a dropdown (<details>), each
   // loading its preview when first opened, plus a Zoom in button.
-  map.on('click', 'clusters', async (e) => {
-    const feature = e.features?.[0]
-    if (!feature) return
+  const openCluster = async (feature) => {
     const source = map.getSource('stations')
     const clusterId = feature.properties.cluster_id
     const total = feature.properties.point_count
@@ -282,9 +300,20 @@ export async function initMap(container, {
     })
     content.append(zoomButton)
     openPopup(feature.geometry.coordinates, content, 'top')
+  }
+
+  // One tap handler for everything: find what is under the finger (tap
+  // circles and clusters), open the closest one.
+  const TAPPABLE = ['clusters', 'station-hit', 'home-hit']
+  map.on('click', (e) => {
+    const under = map.queryRenderedFeatures(e.point, { layers: TAPPABLE })
+    const feature = nearestFeature(under, e.point, (c) => map.project(c))
+    if (!feature) return
+    // Returned so tests can wait for a cluster list; MapLibre ignores it.
+    return feature.properties.cluster_id != null ? openCluster(feature) : openStation(feature)
   })
 
-  for (const layer of ['clusters', 'station', 'home']) {
+  for (const layer of TAPPABLE) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = '' })
   }

@@ -148,7 +148,9 @@ Browse screen growth. All three were requested; the order and details get decide
   (up to 50, "+N more"), each a dropdown that loads its preview when opened, plus Zoom in.
   Previews are cached per home station for the visit; a failed one retries. Popups open on a fixed
   side (previews above, lists below) and the map slides so they fit; the phone map is 420px.
-  Opening a preview logs `click` with `result_group = 'map'`. (Changed 2026-10-28 at Puriya's
+  Opening a preview logs `click` with `result_group = 'map'`. Pins keep a 5 px dot but get an
+  invisible 22 px tap circle (44 px target, Apple's minimum); where circles overlap, the pin
+  nearest the finger opens (`nearestFeature`). (Changed 2026-10-28 at Puriya's
   request: the first version opened the B3 header in Search, which meant scrolling up.)
   Lazy-loaded on scroll; a CDN or style failure only replaces this card with a message.
 - **Weekend finder:** pick a weekend and see destinations with Fri-out/Sun-back train pairs. Reuses PR 4's `planWeekend`.

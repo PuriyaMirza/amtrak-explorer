@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   stationsGeoJSON, homeGeoJSON, previewModel, buildPreview, initMap,
-  MAPLIBRE_URL, MAPLIBRE_CSS, STYLE_URL, CLUSTER_LIST_LIMIT,
+  MAPLIBRE_URL, MAPLIBRE_CSS, STYLE_URL, CLUSTER_LIST_LIMIT, TAP_RADIUS, nearestFeature,
 } from '../map.js'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -110,6 +110,9 @@ function fakeLibrary({ leaves = [] } = {}) {
     on(event, layer, fn) { if (fn) log.handlers[`${event}:${layer}`] = fn; else log.handlers[event] = layer }
     easeTo(opts) { log.eased = opts }
     getCanvas() { return { style: {} } }
+    // What is "under the finger" is set by each test (log.under).
+    queryRenderedFeatures(point, options) { log.queried = options; return log.under ?? [] }
+    project([lon, lat]) { return { x: lon * 100, y: -lat * 100 } }
   }
   class FakePopup {
     constructor(options) { this.entry = { options, removed: false }; log.popups.push(this.entry) }
@@ -142,15 +145,22 @@ async function start({ homeId = 'NYP', leaves, loadPreview } = {}) {
   })
   return { log, opened, asked, ctl }
 }
-const stationClick = (s) => ({ features: [{ properties: { id: s.id, name: s.name }, geometry: { coordinates: [s.lon, s.lat] } }] })
-const clusterClick = (count) => ({ features: [{ properties: { cluster_id: 7, point_count: count }, geometry: { coordinates: [-75, 40] } }] })
+const stationFeature = (s) => ({ properties: { id: s.id, name: s.name }, geometry: { coordinates: [s.lon, s.lat] } })
+const clusterFeature = (count) => ({ properties: { cluster_id: 7, point_count: count }, geometry: { coordinates: [-75, 40] } })
 const leaf = (s) => ({ properties: { id: s.id, name: s.name } })
+// A tap: `features` are what MapLibre reports under the finger; by default the
+// finger lands exactly on the first one (fake project: x = lon*100, y = -lat*100).
+const tap = (log, features, point) => {
+  log.under = features
+  const [lon, lat] = features[0].geometry.coordinates
+  return log.handlers.click({ point: point ?? { x: lon * 100, y: -lat * 100 } })
+}
 
 test('initMap: OpenFreeMap style, clustered stations, a separate home layer', async () => {
   const { log, ctl } = await start()
   assert.equal(log.options.style, STYLE_URL)
   assert.equal(log.sources.stations.cluster, true)
-  assert.deepEqual(log.layers.map((l) => l.id), ['clusters', 'cluster-count', 'station', 'home'])
+  assert.deepEqual(log.layers.map((l) => l.id), ['clusters', 'cluster-count', 'station', 'home', 'station-hit', 'home-hit'])
   assert.deepEqual(log.layers.find((l) => l.id === 'cluster-count').layout['text-font'], ['Noto Sans Bold'])
   assert.equal(log.sources.home.data.features[0].properties.id, 'NYP')
   assert.equal(ctl.stationCount, 3)
@@ -158,7 +168,7 @@ test('initMap: OpenFreeMap style, clustered stations, a separate home layer', as
 
 test('tapping a station: popup with name + preview from the home station, no HTML', async () => {
   const { log, opened, asked } = await start()
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[1])])
   await settle()
   const popup = log.popups[0]
   assert.equal(popup.html, undefined, 'setHTML must never be used')
@@ -172,7 +182,7 @@ test('tapping a station: popup with name + preview from the home station, no HTM
 
 test('a hostile station name shows as text in the popup', async () => {
   const { log } = await start()
-  log.handlers['click:station'](stationClick(STATIONS[2]))
+  tap(log, [stationFeature(STATIONS[2])])
   await settle()
   assert.equal(log.popups[0].node.find(byClass('map-pop-title')).textContent, EVIL)
 })
@@ -180,13 +190,13 @@ test('a hostile station name shows as text in the popup', async () => {
 test('previews are fetched once per station, and a failure shows a message and can retry', async () => {
   let calls = 0
   const { log } = await start({ loadPreview: async () => { calls++; if (calls === 1) throw new Error('Lookup failed (500)'); return PHL_SUMMARY } })
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[1])])
   await settle()
   assert.match(log.popups[0].node.textContent, /Couldn't load trains \(Lookup failed \(500\)\)/)
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[1])])
   await settle()
   assert.match(log.popups[1].node.textContent, /41 trains today/, 'retried after the failure')
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[1])])
   await settle()
   assert.equal(calls, 2, 'the successful preview is reused, not refetched')
   assert.equal(log.popups[0].removed && log.popups[1].removed, true, 'one popup at a time')
@@ -194,7 +204,7 @@ test('previews are fetched once per station, and a failure shows a message and c
 
 test('tapping a cluster lists its stations A–Z as dropdowns; nothing loads until one is opened', async () => {
   const { log, asked, opened } = await start({ leaves: [leaf(STATIONS[1]), leaf(STATIONS[2])] })
-  await log.handlers['click:clusters'](clusterClick(2))
+  await tap(log, [clusterFeature(2)])
   const node = log.popups[0].node
   assert.equal(node.find(byClass('map-pop-title')).textContent, '2 stations')
   const items = node.findAll(byClass('map-cluster-item'))
@@ -219,7 +229,7 @@ test('tapping a cluster lists its stations A–Z as dropdowns; nothing loads unt
 
 test('a big cluster says how many more, and Zoom in zooms and closes the popup', async () => {
   const { log } = await start({ leaves: [leaf(STATIONS[1])] })
-  await log.handlers['click:clusters'](clusterClick(60))
+  await tap(log, [clusterFeature(60)])
   const node = log.popups[0].node
   assert.match(node.textContent, /\+59 more\. Zoom in to see them\./)
   await node.find(byClass('map-zoom-in')).listeners.click()
@@ -230,14 +240,14 @@ test('a big cluster says how many more, and Zoom in zooms and closes the popup',
 test('setHome moves the highlight, closes the open popup, and refetches previews from the new home', async () => {
   const asked = []
   const { log, ctl } = await start({ loadPreview: async (id) => { asked.push(id); return PHL_SUMMARY } })
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[1])])
   await settle()
   ctl.setHome('PHL')
   assert.equal(log.sources.home.data.features[0].properties.id, 'PHL')
   assert.ok(log.sources.stations.data.features.some((f) => f.properties.id === 'NYP'), 'old home goes back to a normal pin')
   assert.equal(log.popups[0].removed, true)
-  log.handlers['click:station'](stationClick(STATIONS[0]))
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[0])])
+  tap(log, [stationFeature(STATIONS[1])])
   await settle()
   assert.deepEqual(asked, ['PHL', 'NYP', 'PHL'], 'a new home means new numbers, so no stale cache')
 })
@@ -252,10 +262,52 @@ test('initMap rejects (so the page can show its error) when stations fail to loa
 
 test('popups open on a fixed side and the map slides so they fit (previews above, lists below)', async () => {
   const { log } = await start({ leaves: [leaf(STATIONS[1])] })
-  log.handlers['click:station'](stationClick(STATIONS[1]))
+  tap(log, [stationFeature(STATIONS[1])])
   assert.equal(log.popups[0].options.anchor, 'bottom', 'station preview sits above the pin')
   assert.deepEqual(log.eased, { center: [-75.18, 39.96], offset: [0, 96] }, 'pin moved below centre')
-  await log.handlers['click:clusters'](clusterClick(1))
+  await tap(log, [clusterFeature(1)])
   assert.equal(log.popups[1].options.anchor, 'top', 'cluster list hangs below the point')
   assert.deepEqual(log.eased, { center: [-75, 40], offset: [0, -122] }, 'point moved above centre')
+})
+
+test('nearestFeature: the closest centre to the tap wins; nothing under the finger is null', () => {
+  const project = ([x, y]) => ({ x, y })
+  const a = { geometry: { coordinates: [0, 0] } }
+  const b = { geometry: { coordinates: [30, 0] } }
+  assert.equal(nearestFeature([a, b], { x: 10, y: 0 }, project), a)
+  assert.equal(nearestFeature([a, b], { x: 20, y: 0 }, project), b)
+  assert.equal(nearestFeature([], { x: 0, y: 0 }, project), null)
+})
+
+test('pins have an invisible 22 px tap circle (44 px across); taps query it, not the 5 px dot', async () => {
+  const { log } = await start()
+  assert.equal(TAP_RADIUS, 22)
+  for (const id of ['station-hit', 'home-hit']) {
+    const layer = log.layers.find((l) => l.id === id)
+    assert.equal(layer.paint['circle-radius'], TAP_RADIUS, id)
+    assert.equal(layer.paint['circle-opacity'], 0, `${id} must be invisible`)
+  }
+  tap(log, [stationFeature(STATIONS[1])])
+  assert.deepEqual(log.queried.layers, ['clusters', 'station-hit', 'home-hit'])
+})
+
+test('a near miss still opens the pin; with two tap circles overlapping, the closer pin opens', async () => {
+  const { log } = await start()
+  const phl = stationFeature(STATIONS[1]) // screen (-7518, -3996)
+  const x1 = stationFeature(STATIONS[2])  // screen (-7400, -4100)
+  // Finger 15 px off Philadelphia: still Philadelphia.
+  tap(log, [phl], { x: -7518 + 15, y: -3996 })
+  await settle()
+  assert.equal(log.popups.at(-1).node.find(byClass('map-pop-title')).textContent, 'Philadelphia 30th Street')
+  // Both circles under the finger, which is closer to X1: X1 opens.
+  tap(log, [phl, x1], { x: -7410, y: -4090 })
+  await settle()
+  assert.equal(log.popups.at(-1).node.find(byClass('map-pop-title')).textContent, EVIL)
+})
+
+test('a tap on empty map does nothing', async () => {
+  const { log } = await start()
+  log.under = []
+  log.handlers.click({ point: { x: 0, y: 0 } })
+  assert.equal(log.popups.length, 0)
 })

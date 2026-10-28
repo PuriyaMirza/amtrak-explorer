@@ -88,7 +88,9 @@ stations.js         listStations(sql) — every TRAIN station (route_type 2) wit
                     names dropped, our display names. One fixed query, no request input
 map.js              the station map (card 03): MapLibre GL JS 6.13.0 (ES module, CDN, pinned)
                     + OpenFreeMap Positron tiles, no API key. Loaded lazily on scroll;
-                    clustered pins, home pin highlighted. Pin tap → popup with a preview
+                    clustered pins, home pin highlighted. Each pin has an invisible 22 px
+                    tap circle (44 px target); one tap handler opens the nearest pin or
+                    cluster under the finger. Pin tap → popup with a preview
                     (trains today, fastest, first–last, routes) from /api/destination;
                     cluster tap → its stations as <details> dropdowns, each loading the
                     same preview when opened, + Zoom in. Popups built with textContent +
