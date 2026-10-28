@@ -9,7 +9,7 @@
 // importing them (dependency injection). That is what lets a test hand it a
 // fake Anthropic client and a fake `sql` function.
 import { searchTrains } from './search.js'
-import { findDirectTrains, findStationById, todayInNewYork, WEEKDAYS } from './schedule.js'
+import { findDirectTrains, findStationById, timeInNewYork, todayInNewYork, WEEKDAYS } from './schedule.js'
 import { planWeekend, DEFAULT_PAIR_LIMIT } from './weekend.js'
 import { DEFAULT_HOME_STATION, stationName } from './home-station.js'
 
@@ -20,7 +20,7 @@ export const MODEL = 'claude-sonnet-5-5'
 // Bump this whenever SYSTEM_PROMPT or the tools change in a way that could
 // move the eval pass rate. It is written into eval/RESULTS.md next to every
 // run, so a change in pass rate can be tied to a change in the prompt.
-export const PROMPT_VERSION = 'v5'
+export const PROMPT_VERSION = 'v6'
 
 // Where a question starts when the person doesn't say (New York Penn). It
 // lives in home-station.js, shared with the browser's station picker; the
@@ -107,7 +107,9 @@ export const FIND_TRAINS_TOOL = {
       },
       departAfter: {
         type: 'string',
-        description: 'Only trains leaving at or after this 24-hour time, e.g. "18:00".',
+        description:
+          'Only trains leaving at or after this 24-hour time, e.g. "18:00". For "the next train" or ' +
+          '"leaving soon", use the current time from the system prompt with today\'s date.',
       },
       departBefore: {
         type: 'string',
@@ -217,6 +219,9 @@ export const SYSTEM_PROMPT =
   'so say "Eastern time" when you quote times, and mention it especially for stations in other time zones. ' +
   'If a train arrives the next day (arriveDayOffset 1), say so. ' +
   'If the person gave a weekday but no date, state the date you used (for example "Thursday 2026-10-29"). ' +
+  'For "the next train", "leaving soon" or "still today" questions, call find_trains with today\'s date and ' +
+  'departAfter set to the current time from this prompt; if no trains are left today, say so and offer ' +
+  'tomorrow\'s first train. ' +
   'Whenever you give a schedule answer (times, durations, first or last train, a weekday or date), ' +
   'add one short sentence that holiday schedules are not modelled and the person should confirm on amtrak.com. ' +
   'If a station name is ambiguous, say which stations matched and which one you used or ask. ' +
@@ -229,19 +234,24 @@ export const SYSTEM_PROMPT =
   'something matters (for example "arrives next day" or "starts the evening before"); ' +
   'then the holiday sentence as its own last line. Otherwise answer in one or two short sentences.'
 
-// SYSTEM_PROMPT plus today's date. The model has no clock, and "next
-// Thursday" or "this Saturday" can't be turned into a date without one. It is
-// computed per request (not at import time, which on a warm serverless
-// instance could be days old) and in New York time, matching the schedule data.
+// SYSTEM_PROMPT plus today's date and the current time. The model has no
+// clock, so "next Thursday" can't become a date, and "the next train" can't
+// become a departAfter, without them. Computed per request (not at import time,
+// which on a warm serverless instance could be days old) and in New York time,
+// matching the schedule data.
+//
+// `now` is the SERVER clock: api/ask.js never passes one, only tests do. A
+// time taken from the request would let a caller choose what "now" is, and
+// this text is instructions to the model, so it would be prompt injection.
 //
 // The home station is added the same way. It must come from
-// resolveHomeStation(), never straight from the request: this text is
-// instructions to the model, so browser text here would be prompt injection.
+// resolveHomeStation(), never straight from the request.
 export function systemPromptFor(now = new Date(), home = DEFAULT_HOME_STATION) {
   const iso = todayInNewYork(now)
   const weekday = WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()]
   return (
-    `${SYSTEM_PROMPT} Today is ${weekday} ${iso} (US Eastern time). ` +
+    `${SYSTEM_PROMPT} Today is ${weekday} ${iso} and the time now is ${timeInNewYork(now)} ` +
+    '(24-hour, US Eastern time). ' +
     `The person's home station is ${home.name} (${home.stop_id}). ` +
     'If a question needs a departure station and they did not name one, leave from the home station ' +
     `and say so in the answer (for example "from ${home.name}"). If they name a station, use theirs.`

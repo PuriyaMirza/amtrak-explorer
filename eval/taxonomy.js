@@ -23,6 +23,9 @@ export const FAILURE_TYPES = {
   toolQueriesInclude: 'no-grounding',
   // Never called the tool this question needs (e.g. a schedule tool).
   toolCalled: 'wrong-tool',
+  // Called the tool but without the input the question needs, e.g. "the next
+  // train" with no departAfter, so the answer can't be about trains from now.
+  toolInputHas: 'ignored-time',
   // The request itself blew up (HTTP error, API error, timeout).
   request: 'request-error',
 }
@@ -36,6 +39,7 @@ export const FAILURE_TYPE_DESCRIPTIONS = {
   'wrong-refusal': 'refused when a real answer was available',
   'no-grounding': 'no search query about the thing asked, so the answer is ungrounded',
   'wrong-tool': 'never called the tool the question needs',
+  'ignored-time': 'called the tool without the current time ("next train" with no departAfter)',
   'request-error': 'the request itself failed (HTTP/API error)',
 }
 

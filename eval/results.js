@@ -57,6 +57,10 @@ directly comparable. Existing rows are untouched and are implicitly scorer v1.
   unchanged by construction. Motivating false negative, found in the prompt-v5 run:
   \`cardinal-no-boarding-was-nyc\`, where a correct grounded answer said no three
   ways and v2 recognised none of them.
+- **v4**: adds one check, \`toolInputHas\` (a tool INPUT field is present and well-formed).
+  Every existing check is byte-identical, so the 41 earlier cases score exactly as under v3;
+  only the new case \`next-train-uses-current-time\` (prompt v6) reads it. Failure type:
+  \`ignored-time\`. The case count goes 41 -> 42, so pass fractions change denominator.
 
 | Date (UTC) | Mode | Model | Prompt | Pass | By category | Failure types | Failed cases |
 |---|---|---|---|---|---|---|---|

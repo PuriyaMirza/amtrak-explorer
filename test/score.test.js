@@ -205,8 +205,8 @@ const WEEKEND_ANSWER =
   'Sunday: Acela 2250 leaves Philadelphia at 6:00 PM, so you get about 47 hours there. ' +
   "Holiday schedules are not modelled, so please confirm on amtrak.com. I can't see fares or seat availability."
 
-test('SCORER_VERSION is 3 (refusalExpected phrasings from the prompt-v5 run)', () => {
-  assert.equal(SCORER_VERSION, 3)
+test('SCORER_VERSION is 4 (toolInputHas, for the prompt-v6 next-train case)', () => {
+  assert.equal(SCORER_VERSION, 4)
 })
 
 // Scorer 3. The real prompt-v5 answer to cardinal-no-boarding-was-nyc: a
@@ -337,4 +337,23 @@ test('withoutScopeDisclaimers cuts only the disclaimer clause', () => {
 test('scope disclaimers do not rescue refusalExpected or declineConstraint', () => {
   assert.equal(score({ refusalExpected: true }, { answer: "I can't see fares." }).pass, true)
   assert.equal(score({ declineConstraint: true }, { answer: 'No fares are shown.' }).pass, false)
+})
+
+test('toolInputHas: passes only when that tool sent the field, well-formed', () => {
+  const checks = { toolInputHas: { tool: 'find_trains', field: 'departAfter', matches: '^\\d{1,2}:\\d{2}$' } }
+  const run = (toolCalls) => scoreCase({ checks }, { answer: 'x', toolCalls }).pass
+  assert.equal(run([{ name: 'find_trains', input: { from: 'NYP', to: 'BOS', departAfter: '12:25' } }]), true)
+  assert.equal(run([{ name: 'find_trains', input: { from: 'NYP', to: 'BOS' } }]), false, 'no departAfter')
+  assert.equal(run([{ name: 'find_trains', input: { departAfter: '' } }]), false, 'empty')
+  assert.equal(run([{ name: 'find_trains', input: { departAfter: 'noon' } }]), false, 'not HH:MM')
+  assert.equal(run([{ name: 'plan_weekend', input: { departAfter: '12:25' } }]), false, 'wrong tool')
+  assert.equal(run([{ name: 'find_trains' }]), false, 'no input recorded')
+  assert.equal(run([]), false)
+  // Any one matching call is enough (the model may call find_trains twice).
+  assert.equal(run([{ name: 'find_trains', input: {} }, { name: 'find_trains', input: { departAfter: '9:05' } }]), true)
+})
+
+test('toolInputHas: a miss is counted as ignored-time', () => {
+  const out = scoreCase({ checks: { toolInputHas: { tool: 'find_trains', field: 'departAfter' } } }, { answer: '', toolCalls: [] })
+  assert.equal(out.results[0].type, 'ignored-time')
 })

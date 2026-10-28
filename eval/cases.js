@@ -44,6 +44,10 @@
 //     The model must have called this tool at least once. Checks the
 //     structure of the response (each toolCalls entry records its `name`),
 //     not the prose, so it is far less brittle than a string match.
+//   toolInputHas: { tool, field, matches? }
+//     Some call to `tool` sent a non-empty `field` (matching the regex string
+//     `matches`, if given). For answers that change with the clock ("the next
+//     train"), where only the tool input can be checked stably. Scorer v4+.
 //
 // Every failed check maps to a named failure type; see taxonomy.js.
 //
@@ -521,6 +525,23 @@ export const CASES = [
       anyOfGroups: [['Penn', 'New York', 'NYP']],
       anyOfTimes: [['5:27', '5:44']],
       toolCalled: 'find_trains',
+    },
+  },
+  {
+    id: 'next-train-uses-current-time',
+    category: 'schedule',
+    question: 'When is the next train to Boston?',
+    // Prompt v6. Before v6 the answer was "I don't know the current time".
+    // The right train changes by the hour, so this does NOT pin a train or a
+    // time: it checks the structure instead (find_trains was sent a real
+    // 'HH:MM' departAfter) plus that it answered from the home station.
+    // Run evals during the day: after the last NYP -> BOS train (around
+    // 9-10 PM Eastern) a correct "none left today" answer may read as a refusal.
+    checks: {
+      noRefusal: true,
+      anyOfGroups: [['Penn', 'New York', 'NYP']],
+      toolCalled: 'find_trains',
+      toolInputHas: { tool: 'find_trains', field: 'departAfter', matches: '^\\d{1,2}:\\d{2}$' },
     },
   },
   {

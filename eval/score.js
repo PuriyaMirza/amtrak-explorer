@@ -14,7 +14,11 @@ import { failureTypeOf } from './taxonomy.js'
 //       bare sentence-initial "No.", "doesn't allow", "no usable/boardable".
 //       noRefusal is untouched by construction (it never reads this pattern).
 //       (motivating false negative: cardinal-no-boarding-was-nyc, prompt v5)
-export const SCORER_VERSION = 3
+//   4 = adds the toolInputHas check (structure: a tool input field is present
+//       and well-formed). Every existing check is byte-identical, so the 41 v3
+//       cases score exactly as under v3; only the new case reads it.
+//       (motivating case: next-train-uses-current-time, prompt v6)
+export const SCORER_VERSION = 4
 
 // Heuristic, not exhaustive — built from refusal phrasing actually observed
 // from the live model (e.g. "can't take a train", "no matching Amtrak
@@ -236,6 +240,21 @@ export function scoreCase(caseDef, { answer, toolCalls }) {
       `toolCalled: ${checks.toolCalled}`,
       (toolCalls || []).some((tc) => tc.name === checks.toolCalled),
     )
+  }
+
+  // Structure check on the tool INPUT: some call to `tool` must have sent
+  // `field`, and (if given) it must match `matches`. For "the next train" this
+  // asserts departAfter was a real 'HH:MM' without fixing which time: the
+  // right train changes by the hour, so the answer text can't be pinned.
+  if (checks.toolInputHas) {
+    const { tool, field, matches } = checks.toolInputHas
+    const ok = (toolCalls || []).some((tc) => {
+      if (tc.name !== tool) return false
+      const value = tc.input?.[field]
+      if (value == null || value === '') return false
+      return matches ? new RegExp(matches).test(String(value)) : true
+    })
+    add('toolInputHas', `toolInputHas: ${tool}.${field}${matches ? ` ~ /${matches}/` : ''}`, ok)
   }
 
   return { pass: results.every((r) => r.pass), results }

@@ -97,6 +97,19 @@ export function todayInNewYork(now = new Date()) {
   }).format(now)
 }
 
+// The current time in New York as 24-hour 'HH:MM' (the shape departAfter
+// takes), for "when is the next train". Same rule as todayInNewYork: `now`
+// comes from the server clock (or a test), never from a request.
+// hourCycle h23 so midnight is "00:05", not "24:05".
+export function timeInNewYork(now = new Date()) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: FEED_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(now)
+}
+
 // 'HH:MM' (24-hour) -> minutes after midnight, or null if malformed.
 export function parseClock(text) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(text)
