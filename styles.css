@@ -141,3 +141,33 @@ code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-
   border: 1px solid var(--surface-1); border-radius: 8px; padding: 10px 16px; cursor: pointer;
 }
 .stat-grid + .answer-note, .dest-actions + .answer-note { margin-top: 12px; }
+
+/* Station map (card 03, map.js). MapLibre fills the box; rounded like the cards. */
+.map { height: 380px; border: 1px solid var(--surface-1); border-radius: 10px; overflow: hidden; }
+.map .maplibregl-popup-content {
+  font-family: 'Manrope', system-ui, sans-serif; font-size: 13px; font-weight: 700;
+  color: var(--surface-1); background: var(--surface-4); border-radius: 8px; padding: 6px 10px;
+}
+@media (max-width: 520px) { .map { height: 420px; } }
+
+/* Map popups: a station preview, or a cluster's list of stations as dropdowns. */
+.map .maplibregl-popup-content { padding: 10px 12px; }
+.map-pop-title { margin: 0 18px 0 0; font-size: 14px; font-weight: 700; line-height: 1.3; }
+.map-pop-id { margin: 1px 0 6px; font-size: 11px; font-weight: 500; opacity: 0.7; }
+.map-preview { font-weight: 500; }
+.map-preview-from { margin: 0 0 6px; font-size: 11px; opacity: 0.75; }
+.map-preview-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.map-preview-stat:last-child { grid-column: 1 / -1; }
+.map-preview-value { display: block; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.map-preview-label { display: block; font-size: 11px; opacity: 0.7; }
+.map-preview-routes { margin: 6px 0 0; font-size: 11px; color: var(--surface-2); font-weight: 700; }
+.map-preview-status { margin: 4px 0; font-size: 12px; font-weight: 500; opacity: 0.8; }
+.map-cluster-list { max-height: 180px; overflow-y: auto; margin: 6px 0; border-top: 1px solid rgba(22, 21, 28, 0.15); }
+.map-cluster-item { border-bottom: 1px solid rgba(22, 21, 28, 0.15); padding: 6px 0; }
+.map-cluster-item summary { cursor: pointer; font-size: 13px; font-weight: 700; }
+.map-cluster-item summary::marker { color: var(--surface-2); }
+.map-cluster-item[open] summary { margin-bottom: 6px; }
+.map-zoom-in {
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--surface-4); background: var(--surface-2);
+  border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; margin-top: 4px;
+}

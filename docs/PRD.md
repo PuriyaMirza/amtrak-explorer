@@ -139,6 +139,20 @@ Browse screen growth. All three were requested; the order and details get decide
   attribution MapLibre adds automatically. Rejected: Leaflet + CARTO Positron, because CARTO raster tiles have
   required an API key since 2026-09-25 ([CARTO FAQ](https://docs.carto.com/faqs/carto-basemaps)). Station names in pin popups
   go through `escapeHtml`. Risk: OpenFreeMap is donation-funded with no SLA; if it goes away, swap the style URL (tiles are separate from MapLibre).
+  **Built 2026-10-28** (PR "Map"): card 03 under Ask. `map.js` + `stations.js` + `GET /api/stations`.
+  MapLibre **6.13.0** (v6 is ES-module only: `dist/maplibre-gl.mjs`, imported from jsDelivr; pinned
+  to a release three weeks old rather than the newest), Positron style. Train stations only
+  (route_type 2), clustered below zoom 8, home station as a lavender pin that follows the picker,
+  pin tap → a popup **with a preview** (trains today, fastest, first – last, up to 3 routes; same
+  `/api/destination` numbers as B3), no scrolling. Cluster tap → a popup listing its stations A–Z
+  (up to 50, "+N more"), each a dropdown that loads its preview when opened, plus Zoom in.
+  Previews are cached per home station for the visit; a failed one retries. Popups open on a fixed
+  side (previews above, lists below) and the map slides so they fit; the phone map is 420px.
+  Opening a preview logs `click` with `result_group = 'map'`. Pins keep a 5 px dot but get an
+  invisible 22 px tap circle (44 px target, Apple's minimum); where circles overlap, the pin
+  nearest the finger opens (`nearestFeature`). (Changed 2026-10-28 at Puriya's
+  request: the first version opened the B3 header in Search, which meant scrolling up.)
+  Lazy-loaded on scroll; a CDN or style failure only replaces this card with a message.
 - **Weekend finder:** pick a weekend and see destinations with Fri-out/Sun-back train pairs. Reuses PR 4's `planWeekend`.
 
 Design implication for this phase: keep `schedule.js` and `planWeekend` free of AI-specific shapes, so the browse UI can call them through a plain `/api/` endpoint later.
