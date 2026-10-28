@@ -81,6 +81,9 @@ weekend.js          planWeekend(sql, {from, to, outDate|outDay, returnDate|retur
                     round trips: pairs outbound + return trains (built on
                     findDirectTrains, no SQL of its own) and reports hoursAtDestination.
                     Plain data, reusable by a future browse "weekend finder"
+destination.js      destinationSummary(sql, {from, to, date}) — the destination header (B3):
+                    fastest, median, trains/day, first/last departure, routes. Built on
+                    findDirectTrains (limit 100), no SQL of its own, like weekend.js
 home-station.js     DEFAULT_HOME_STATION (NYP) + load/saveHomeStation(localStorage) for
                     the picker; shared by browser and ask-core.js (pure; unit-tested)
 tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown
@@ -97,6 +100,8 @@ ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool 
                     plan_weekend (weekend.js);
                     systemPromptFor() adds today's date and the current time per request
 api/search.js       GET  /api/search?q=   → searchTrains
+api/destination.js  GET  /api/destination?to=&from=&date= → destinationSummary (to = stop_id
+                    only; from via resolveHomeStation, else NYP). No AI in the path
 api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
 api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
                     builds clients from env) → askQuestion → logAsk

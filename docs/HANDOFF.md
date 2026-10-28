@@ -97,6 +97,17 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 
 ## Small open items
 
+- **Known wording issue, accepted (Puriya, 2026-10-28, "option A"): muddled count headlines.**
+  On the v6 preview, "how many trains to Philadelphia" (asked 12:51 PM) got: "41 direct trains...
+  One of them is the 12:20 AM train, which has already left. The other 40 depart from midnight
+  through 11:23 PM", while ~21 had already left. The facts were right (41 total, next 12:50 PM
+  train 1147, last 11:23 PM train 67); the summary sentence didn't hang together. Not fixed on
+  purpose: it would be another prompt version and eval run on top of an unevaluated v6.
+  Revisit if it recurs; the fix would be a rule like "for how-many questions give total,
+  already left and still to come". **Write-up material:** the evals check facts and tool use,
+  not whether a summary is coherent, so a 42/42 run can still ship this. Knowing what the eval
+  does not measure is part of the method (same point as `render-answer.test.js`).
+
 - ~~**Unescaped DB text in search results**~~ **Fixed 2026-10-28:** `searchResultsHtml()`
   (split out of `render()`) escapes every DB value in text and `data-*` attributes, both
   error messages are escaped, and `escapeHtml` accepts null/numbers.
