@@ -95,10 +95,10 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 
 ## Small open items
 
-- **Unescaped DB text in search results** (found during #15, not fixed): `render()` in
-  `index.html` puts `stop_name` / `route_long_name` into `innerHTML` and `data-*`
-  attributes without `escapeHtml`. Low risk (our own GTFS data), but it is the same XSS
-  shape the ask answer guards against. One small PR: run those values through `escapeHtml`.
+- ~~**Unescaped DB text in search results**~~ **Fixed 2026-10-28:** `searchResultsHtml()`
+  (split out of `render()`) escapes every DB value in text and `data-*` attributes, both
+  error messages are escaped, and `escapeHtml` accepts null/numbers.
+  `test/search-results.test.js` (6 tests, lifted from `index.html`) pins it.
 - **Inert RLS on `events`:** decide drop vs keep (zero policies; functions connect as owner).
 - **Write-up #1 (roadmap D), Puriya's to write.** Raw material:
   - `eval/RESULTS.md`: 27 → 38 → 40 → 41 → 40/41 → **41/41** (the v5 dip was the scorer, not

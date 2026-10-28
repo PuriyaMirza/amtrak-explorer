@@ -160,19 +160,27 @@
       return `type ${type}`
     }
 
-        function render({ stations, routes }, queryId) {
+    // Builds the search-results HTML as a string. Every value that came from
+    // the database goes through escapeHtml (defined further down, with the ask
+    // code; it exists by the time a search runs), both in the visible text and
+    // in data-* attributes: a station name is shown as text, never run as HTML.
+    // Pure string -> string, so test/search-results.test.js can check it.
+    function searchResultsHtml({ stations, routes }, queryId) {
       const routeNames = [...new Set(routes.map(r => r.route_long_name))]
+      const q = escapeHtml(queryId)
 
       const sections = []
 
       sections.push(`<h2>Stations (${stations.length})</h2>`)
       if (stations.length) {
-        sections.push('<ul>' + stations.map((s, i) =>
-          `<li class="clickable" data-query-id="${queryId}" data-group="station"
-               data-id="${s.stop_id}" data-label="${s.stop_name}" data-position="${i}">
-            ${s.stop_name} <span class="meta">${s.stop_id} · ${s.stop_timezone ?? ''}</span>
+        sections.push('<ul>' + stations.map((s, i) => {
+          const id = escapeHtml(s.stop_id)
+          const name = escapeHtml(s.stop_name)
+          return `<li class="clickable" data-query-id="${q}" data-group="station"
+               data-id="${id}" data-label="${name}" data-position="${i}">
+            ${name} <span class="meta">${id} · ${escapeHtml(s.stop_timezone)}</span>
           </li>`
-        ).join('') + '</ul>')
+        }).join('') + '</ul>')
       } else {
         sections.push('<p class="status">No matching stations.</p>')
       }
@@ -181,17 +189,22 @@
       if (routeNames.length) {
         const kindByName = {}
         routes.forEach(r => { kindByName[r.route_long_name] ??= routeKind(r.route_type) })
-        sections.push('<ul>' + routeNames.map((name, i) =>
-          `<li class="clickable" data-query-id="${queryId}" data-group="route"
+        sections.push('<ul>' + routeNames.map((rawName, i) => {
+          const name = escapeHtml(rawName)
+          return `<li class="clickable" data-query-id="${q}" data-group="route"
                data-id="${name}" data-label="${name}" data-position="${i}">
-            ${name} <span class="pill">${kindByName[name]}</span>
+            ${name} <span class="pill">${escapeHtml(kindByName[rawName])}</span>
           </li>`
-        ).join('') + '</ul>')
+        }).join('') + '</ul>')
       } else {
         sections.push('<p class="status">No matching routes.</p>')
       }
 
-      results.innerHTML = sections.join('')
+      return sections.join('')
+    }
+
+    function render(data, queryId) {
+      results.innerHTML = searchResultsHtml(data, queryId)
     }
 
     // Debounce: each keystroke resets the timer, so the query only fires
@@ -224,7 +237,7 @@
             route_count: data.routes.length,
           })
         } catch (err) {
-          results.innerHTML = `<p class="status">Error: ${err.message}</p>`
+          results.innerHTML = `<p class="status">Error: ${escapeHtml(err.message)}</p>`
         }
       }, DEBOUNCE_MS)
     })
@@ -254,7 +267,9 @@
 
     // Escape before inserting: the answer is model output, and raw
     // innerHTML with untrusted text is the shape of an XSS bug.
-    const escapeHtml = (str) => str.replace(/[&<>"']/g, (c) => (
+    // String(str ?? '') so a null column (e.g. stop_timezone) shows as empty
+    // instead of throwing, and a number (a train id) is escaped like text.
+    const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ))
 
@@ -321,7 +336,7 @@
 
         askResults.innerHTML = parts.join('')
       } catch (err) {
-        askResults.innerHTML = `<p class="status error">Error: ${err.message}</p>`
+        askResults.innerHTML = `<p class="status error">Error: ${escapeHtml(err.message)}</p>`
       } finally {
         askButton.disabled = false
       }
