@@ -221,6 +221,18 @@ Acceptance criteria
 
 #### B3: Destination detail header (sheet 07)
 
+**Built 2026-10-28** (PR "B3: destination header"). Declared deviations from the spec below:
+- Lives in a new `destination.js` (like `weekend.js`: no SQL of its own, built on
+  `findDirectTrains`), not inside `schedule.js`. Endpoint `GET /api/destination?to=&from=&date=`.
+- Open question 1 → 4 tiles without distance: fastest, median, trains that day, and first – last
+  departure (ET). Distance stays parked until someone checks `shape_dist_traveled` in Neon.
+- Open question 3 → opens on a station click in the search results, below the search box.
+- `to` must be a stop_id (no free text); `from` goes through `resolveHomeStation`.
+- Station names use our display names (`stationName`: "New York Penn Station", not the feed's
+  "Ny Moynihan Train Hall At Penn Station").
+- Not checked here: acceptance criterion 1 ("matches a direct SQL count") needs the live
+  database. Check on the preview: NYP → PHL trains per day vs `find_trains` in the ask box.
+
 - `destinationSummary(sql, { from, to, date })` in `schedule.js`, built on `findDirectTrains`'
   **full** train list before the 12/20 cap (the cap would make "trains per day" and "median" wrong
   on busy pairs). Returns `{ station, fastest, median, trainsPerDay, routes, date }`.

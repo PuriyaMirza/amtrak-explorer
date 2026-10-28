@@ -112,3 +112,26 @@ code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-
   .home-station-picker { left: 0; right: auto; width: 100%; }
   h1 { font-size: 30px; }
 }
+
+/* Destination header (PRD §7.1 B3, Figma sheet 07): indigo title block, stat
+   tiles, route pills. Shown under the search box when a station is clicked. */
+.dest { margin-top: 16px; }
+.dest-title { background: var(--surface-1); color: var(--surface-4); border-radius: 10px; padding: 18px 20px; }
+.dest-eyebrow { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--accent-1); }
+.dest-name { margin: 6px 0 2px; font-size: 26px; font-weight: 700; line-height: 1.2; }
+.dest-id { margin: 0; font-size: 13px; opacity: 0.8; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.stat { border: 1px solid var(--surface-1); border-radius: 10px; padding: 12px 13px; }
+.stat-value { display: block; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-label { display: block; font-size: 12px; opacity: 0.75; margin-top: 2px; }
+.dest-routes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.dest-actions { display: flex; gap: 10px; margin-top: 14px; }
+.dest-link {
+  font-size: 14px; font-weight: 700; color: var(--surface-4); background: var(--surface-2);
+  border-radius: 8px; padding: 11px 18px; text-decoration: none;
+}
+.dest-close {
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--surface-1); background: transparent;
+  border: 1px solid var(--surface-1); border-radius: 8px; padding: 10px 16px; cursor: pointer;
+}
+.stat-grid + .answer-note, .dest-actions + .answer-note { margin-top: 12px; }

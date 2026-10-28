@@ -35,6 +35,7 @@
     </div>
     <hr class="rule">
     <input id="q" type="text" placeholder="Search stations and routes…" autocomplete="off" aria-label="Search stations and routes" />
+    <div id="destination" class="dest" hidden aria-live="polite"></div>
     <div id="results"></div>
   </section>
 
@@ -207,6 +208,47 @@
       results.innerHTML = searchResultsHtml(data, queryId)
     }
 
+    // The destination header (PRD §7.1 B3) for one /api/destination response.
+    // Pure string -> string, so test/destination-header.test.js can check it.
+    // Every database value goes through escapeHtml. Times are the feed's
+    // Eastern times and are labelled ET everywhere.
+    function destinationHtml(d) {
+      const holiday = '<p class="answer-note">Holiday schedules are not modelled; confirm on amtrak.com.</p>'
+      if (!d.ok) {
+        return `<p class="status">${escapeHtml(d.notes?.[0] ?? 'No data for that station.')}</p>`
+      }
+      const day = `${escapeHtml(d.weekday)} ${escapeHtml(d.date)}`
+      const title =
+        '<div class="dest-title">' +
+        `<p class="dest-eyebrow">FROM ${escapeHtml(d.from.name).toUpperCase()} · ${day.toUpperCase()} · TIMES ET</p>` +
+        `<h3 class="dest-name">${escapeHtml(d.to.name)}</h3>` +
+        `<p class="dest-id">${escapeHtml(d.to.stop_id)}</p>` +
+        '</div>'
+      const close = '<button type="button" class="dest-close" data-action="close-destination">Close</button>'
+      if (d.outsideFeed) {
+        return title + `<p class="status">No schedule data for ${day}.</p><div class="dest-actions">${close}</div>`
+      }
+      if (!d.trainsPerDay) {
+        return title + `<p class="status">No direct train from ${escapeHtml(d.from.name)} on ${day}.</p>` +
+          `<div class="dest-actions">${close}</div>${holiday}`
+      }
+      const stat = (value, label) =>
+        `<div class="stat"><span class="stat-value">${escapeHtml(value)}</span><span class="stat-label">${escapeHtml(label)}</span></div>`
+      const tiles =
+        '<div class="stat-grid">' +
+        stat(d.fastest.duration, `fastest · train ${d.fastest.train}`) +
+        stat(d.median.duration, d.medianPartial ? 'median (first 100 trains)' : 'median') +
+        stat(d.trainsPerDay, d.trainsPerDay === 1 ? 'train that day' : 'trains that day') +
+        stat(`${d.earliest.depart} – ${d.latest.depart}`, 'first – last departure (ET)') +
+        '</div>'
+      const routes = '<div class="dest-routes">' +
+        d.routes.map((r) => `<span class="pill">${escapeHtml(r)}</span>`).join('') + '</div>'
+      const actions = '<div class="dest-actions">' +
+        '<a class="dest-link" href="https://www.amtrak.com/" target="_blank" rel="noopener noreferrer">Amtrak.com →</a>' +
+        close + '</div>'
+      return title + tiles + routes + actions + holiday
+    }
+
     // Debounce: each keystroke resets the timer, so the query only fires
     // once the user pauses typing for DEBOUNCE_MS.
     let timer
@@ -254,6 +296,38 @@
         result_position: Number(item.dataset.position),
         result_group: item.dataset.group,
       })
+
+      if (item.dataset.group === 'station') showDestination(item.dataset.id)
+    })
+
+    // ---- Destination header (B3) ----
+    // A station click asks /api/destination for that station, from the home
+    // station, today. Only stop_ids go in the URL; the server re-checks both.
+    const destination = document.getElementById('destination')
+    let destinationRequest = 0 // so a slow older response can't overwrite a newer one
+
+    async function showDestination(stopId) {
+      const mine = ++destinationRequest
+      destination.hidden = false
+      destination.innerHTML = '<p class="status">Loading…</p>'
+      destination.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      try {
+        const params = new URLSearchParams({ to: stopId, from: homeStation.stop_id })
+        const res = await fetch(`/api/destination?${params}`)
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || `Lookup failed (${res.status})`)
+        if (mine === destinationRequest) destination.innerHTML = destinationHtml(data)
+      } catch (err) {
+        if (mine === destinationRequest) destination.innerHTML = `<p class="status error">Error: ${escapeHtml(err.message)}</p>`
+      }
+    }
+
+    destination.addEventListener('click', (event) => {
+      if (event.target.closest('[data-action="close-destination"]')) {
+        destinationRequest++
+        destination.hidden = true
+        destination.replaceChildren()
+      }
     })
 
     // ---- Natural-language ask ----
