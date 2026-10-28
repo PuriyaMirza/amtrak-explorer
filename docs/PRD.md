@@ -133,7 +133,12 @@ as a parameter; endpoints have no query logic of their own), and ships tests.
 
 Browse screen growth. All three were requested; the order and details get decided when this phase ships.
 - **Filters:** time of day, route.
-- **Map:** station pins from `stops.stop_lat`/`stop_lon`.
+- **Map:** station pins from `stops.stop_lat`/`stop_lon`. **Decided 2026-10-28 (Puriya): MapLibre GL JS + OpenFreeMap tiles.**
+  Free, with no API key or registration and no stated limit on views ([openfreemap.org](https://openfreemap.org), checked 2026-10-28),
+  so there's no secret in the browser. Loaded from a CDN `<script>` tag pinned to an exact version (no build step). Keep the
+  attribution MapLibre adds automatically. Rejected: Leaflet + CARTO Positron, because CARTO raster tiles have
+  required an API key since 2026-09-25 ([CARTO FAQ](https://docs.carto.com/faqs/carto-basemaps)). Station names in pin popups
+  go through `escapeHtml`. Risk: OpenFreeMap is donation-funded with no SLA; if it goes away, swap the style URL (tiles are separate from MapLibre).
 - **Weekend finder:** pick a weekend and see destinations with Fri-out/Sun-back train pairs. Reuses PR 4's `planWeekend`.
 
 Design implication for this phase: keep `schedule.js` and `planWeekend` free of AI-specific shapes, so the browse UI can call them through a plain `/api/` endpoint later.
