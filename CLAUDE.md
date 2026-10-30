@@ -109,7 +109,7 @@ ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool 
                     plus MODEL, PROMPT_VERSION and the prompt/tool constants.
                     Tools: search_trains (names), find_trains (schedule.js) and
                     plan_weekend (weekend.js);
-                    systemPromptFor() adds today's date per request
+                    systemPromptFor() adds today's date and the current time per request
 api/search.js       GET  /api/search?q=   → searchTrains
 api/destination.js  GET  /api/destination?to=&from=&date= → destinationSummary (to = stop_id
                     only; from via resolveHomeStation, else NYP). No AI in the path
@@ -117,7 +117,7 @@ api/stations.js     GET  /api/stations → listStations (no input; edge-cached a
 api/log.js          POST /api/log         → type gate → insertEvent (browser rows only)
 api/ask.js          POST /api/ask         → thin handler (validation, 500-char cap,
                     builds clients from env) → askQuestion → logAsk
-eval/cases.js       41 eval cases (easy / ambiguous / adversarial / schedule)
+eval/cases.js       42 eval cases (easy / ambiguous / adversarial / schedule)
 eval/score.js       scoreCase() — deterministic checks, no LLM judge
 eval/taxonomy.js    check → named failure type (hallucinated-entity, ...)
 eval/runner.js      runCases(), chooseMode() — the loop, testable with a fake ask
@@ -286,6 +286,10 @@ text goes back to the model as the tool result so it can correct itself.
   never from the model, so the model can't choose what "today" is. The same date is
   appended to the system prompt per request (`systemPromptFor`) so "next Thursday"
   can be turned into a date.
+- **The current time is injected the same way** (v6). `systemPromptFor` adds
+  `timeInNewYork(now)`, where `now` is the server clock; `api/ask.js` never passes one, so a
+  request can't choose what "now" is or put text into the prompt. `test/ask-handler.test.js`
+  sends a body with `now` and prompt text and checks neither reaches the system prompt.
 - **Home station is validated, never echoed.** `home_station` from the browser goes
   through `resolveHomeStation`: id-shaped (`[A-Za-z0-9]{1,10}`) and an exact `stops.stop_id`
   match, else the default (NYP). Only our table's id and name reach the prompt, so request
@@ -307,24 +311,33 @@ text goes back to the model as the tool result so it can correct itself.
     stop_id as `home_station`)
   - **v5**: answer layout: a headline line, one `dep → arr · train · duration [· note]`
     line per train, then the holiday line. `renderAnswer` in index.html turns those lines
-    into rows (escaped); other answers stay one paragraph. Current; evaluated 2026-10-26
+    into rows (escaped); other answers stay one paragraph. Evaluated 2026-10-26
     (40/41 under scorer 2; the single failure was a scorer bug, fixed in scorer 3)
+  - **v6**: the current New York time (`timeInNewYork`, server clock) next to today's date,
+    plus a rule: "next train" questions call `find_trains` with today's date and
+    `departAfter` = now. Also: separate facts that aren't train rows go on `- ` lines, which
+    `renderAnswer` shows as a bulleted list (v5 forbade bullets; the model used them anyway).
+    Current. Evaluated 2026-10-30: **42/42** (scorer 4). Run evals during the day: the
+    `next-train-uses-current-time` case can misread "none left today" late at night.
 
-**System prompt rules (v5)** (if you reword them, update `eval/cases.js`, which looks
+**System prompt rules (v6)** (if you reword them, update `eval/cases.js`, which looks
 for some of these phrases)
 - Only state stations, routes, train numbers, times and durations that a tool returned;
   never invent a station, schedule or price.
 - Say times are US Eastern (the feed gives Eastern at every station), and flag it for
   stations in other time zones. If a train arrives the next day, say so.
 - If the person gave a weekday but no date, **state the resolved date** ("Thursday 2026-10-29").
+- **"Next train"** (v6): call `find_trains` with today's date and `departAfter` = the current time
+  from the prompt; if nothing is left today, say so and offer tomorrow's first train.
 - Add one short **holiday caveat** to every schedule answer: holiday schedules are not
   modelled, confirm on amtrak.com.
 - Use `plan_weekend` for go-and-come-back questions, `find_trains` for one-way.
 - **Home station** (v4): no departure station given → leave from the home station and say
   so ("from New York Penn Station"). Added per request by `systemPromptFor`, like today's date.
 - Direct trains only; no fares, live delays, seat availability or booking. Say so rather than guess.
-- Ambiguous station names: say which matched. Plain text only (no markdown). Train lists use
-  the v5 line format above (the page parses it); otherwise one or two short sentences.
+- Ambiguous station names: say which matched. Plain text (no markdown headings, bold or
+  asterisks). Train lists use the v5 line format above (the page parses it); several separate
+  facts go on `- ` lines (v6, shown as bullets); otherwise one or two short sentences.
 
 ### planWeekend (weekend.js)
 
@@ -505,6 +518,11 @@ blocked on having enough data to say anything honest.
   things: `cardinal-no-boarding-was-nyc` passes, and **nothing else moved** — the other 40 cases
   scored the same under scorer 2 and scorer 3, so the new phrasings widened nothing. v5 is a
   genuine 41/41; the 40/41 was the measuring instrument.
+- **Prompt v6** (2026-10-30, current NY time + "- " bullets, scorer 4): **42/42 (100%)**, schedule
+  15/15. New case `next-train-uses-current-time` passes; its key check (`toolInputHas`:
+  `find_trains` got an `HH:MM` `departAfter`) is structural, so it can't drift with wording.
+  Two prompt changes were evaluated in one run on purpose; nothing regressed. Known, accepted
+  gap the run can't see: muddled "how many" headlines (`docs/HANDOFF.md`).
 
 **Three of the four recorded eval "failures" so far have been scorer bugs, not model bugs.**
 Read the answer text before believing a failure — and treat the evaluator as something that

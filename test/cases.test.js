@@ -7,9 +7,9 @@ import { scoreCase } from '../eval/score.js'
 // These guard the case list itself: a typo'd check name in cases.js would
 // otherwise be silently ignored by the scorer (and the case would pass).
 
-test('there are exactly 41 cases with unique ids', () => {
-  assert.equal(CASES.length, 41)
-  assert.equal(new Set(CASES.map((c) => c.id)).size, 41)
+test('there are exactly 42 cases with unique ids', () => {
+  assert.equal(CASES.length, 42)
+  assert.equal(new Set(CASES.map((c) => c.id)).size, 42)
 })
 
 test('categories are the four documented ones, schedule has at least 10', () => {
@@ -54,6 +54,11 @@ test('check values have the right shape', () => {
       if (k[key]) assert.ok(Array.isArray(k[key]) && k[key].length > 0, `${c.id}.${key}`)
     }
     if (k.toolCalled) assert.equal(typeof k.toolCalled, 'string', `${c.id}.toolCalled`)
+    if (k.toolInputHas) {
+      const { tool, field, matches } = k.toolInputHas
+      assert.ok(typeof tool === 'string' && typeof field === 'string', `${c.id}.toolInputHas`)
+      if (matches !== undefined) new RegExp(matches) // throws on a bad pattern
+    }
     for (const key of ['refusalExpected', 'declineConstraint', 'noRefusal']) {
       if (key in k) assert.equal(k[key], true, `${c.id}.${key}`)
     }

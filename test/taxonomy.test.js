@@ -17,6 +17,7 @@ test('each check key maps to the documented failure type', () => {
     noRefusal: 'wrong-refusal',
     toolQueriesInclude: 'no-grounding',
     toolCalled: 'wrong-tool',
+    toolInputHas: 'ignored-time',
     request: 'request-error',
   })
 })

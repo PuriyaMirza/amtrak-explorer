@@ -412,12 +412,18 @@
     // duration [· note]" line per train, then the holiday sentence. Lines in
     // that shape get a layout; anything else stays a plain paragraph, so a
     // one-sentence answer looks the same as before. Every piece is escaped.
+    // v6: lines starting with "- " (or "• ") become bullets; consecutive ones
+    // share one <ul class="answer-list">.
     function renderAnswer(answer) {
       const lines = answer.split('\n').map(l => l.trim()).filter(Boolean)
       if (lines.length < 2) return `<p class="answer">${escapeHtml(answer)}</p>`
       const isTrain = (l) => l.includes('→') && l.includes(' · ')
       const isCaveat = (l) => /holiday/i.test(l)
-      return '<div class="answer">' + lines.map((line, i) => {
+      const BULLET = /^[-•]\s+/
+      const parts = lines.map((raw, i) => {
+        // A "- " in front of a train line is dropped: it stays a train row.
+        const line = isTrain(raw) ? raw.replace(BULLET, '') : raw
+        if (BULLET.test(line)) return { bullet: escapeHtml(line.replace(BULLET, '')) }
         if (isTrain(line)) {
           const [times, train = '', duration = '', ...note] = line.split(' · ').map(escapeHtml)
           return `<div class="train-row"><span class="train-times">${times}</span>` +
@@ -427,7 +433,17 @@
         if (i === lines.length - 1 && isCaveat(line)) return `<p class="answer-note">${escapeHtml(line)}</p>`
         if (i === 0) return `<p class="answer-lead">${escapeHtml(line)}</p>`
         return `<p>${escapeHtml(line)}</p>`
-      }).join('') + '</div>'
+      })
+      // Group runs of bullets into one list; everything else is already HTML.
+      let html = ''
+      for (let i = 0; i < parts.length; i++) {
+        if (typeof parts[i] === 'string') { html += parts[i]; continue }
+        html += '<ul class="answer-list">'
+        while (i < parts.length && typeof parts[i] !== 'string') html += `<li>${parts[i++].bullet}</li>`
+        html += '</ul>'
+        i--
+      }
+      return '<div class="answer">' + html + '</div>'
     }
 
     askForm.addEventListener('submit', async (event) => {

@@ -97,3 +97,48 @@ test('model output is escaped, in both the layout and the fallback path', () => 
   assert.equal(countOf(many, /&lt;img/g), 2, 'escaped in both the headline and the train name')
   assert.ok(!many.includes('onerror="'), 'an unescaped attribute quote survived')
 })
+
+// v6: "- " lines become real bullets. Fixture = the real answer from the live
+// site on 2026-10-28 ("How many trains to Philadelphia today?"), which used
+// "- " lines even under the v5 "no bullet points" rule.
+const BULLET_ANSWER = [
+  'There are 41 direct trains from New York Penn Station to Philadelphia today, Wednesday 2026-10-28.',
+  '- The first is Northeast Regional 1169 at 12:20 AM Eastern time. It started the evening before.',
+  '- The last is Northeast Regional 67 at 11:23 PM Eastern time. It arrives at 12:51 AM the next day.',
+  '- The fastest is Acela 2133 at 12:10 PM Eastern time, which takes 1h 08m.',
+  'This count covers direct trains only, not connections. Holiday schedules are not modelled, so confirm on amtrak.com.',
+].join('\n')
+
+test('v6 bullets: consecutive "- " lines become ONE list, dashes removed', () => {
+  const out = renderAnswer(BULLET_ANSWER)
+  assert.equal(countOf(out, /<ul class="answer-list">/g), 1, 'one list for the three lines')
+  assert.equal(countOf(out, /<li>/g), 3)
+  assert.match(out, /<li>The first is Northeast Regional 1169 at 12:20 AM/)
+  assert.ok(!out.includes('<li>- '), 'the "- " marker should be stripped')
+  assert.equal(countOf(out, /class="answer-lead"/g), 1, 'headline still bold')
+  assert.equal(countOf(out, /class="answer-note"/g), 1, 'holiday line still a footnote')
+})
+
+test('v6 bullets: "•" also works; separate runs make separate lists', () => {
+  const out = renderAnswer('Head\n• one\n• two\nMiddle sentence.\n- three')
+  assert.equal(countOf(out, /<ul class="answer-list">/g), 2)
+  assert.equal(countOf(out, /<li>/g), 3)
+})
+
+test('v6 bullets: a "- " in front of a train line keeps it a train row', () => {
+  const out = renderAnswer('Head\n- 5:44 AM → 9:15 AM · Northeast Regional 66 · 3h 31m')
+  assert.equal(countOf(out, /class="train-row"/g), 1)
+  assert.equal(countOf(out, /<li>/g), 0)
+  assert.match(out, /<span class="train-times">5:44 AM → 9:15 AM<\/span>/)
+})
+
+test('v6 bullets: a hyphen inside a sentence is not a bullet', () => {
+  const out = renderAnswer('Head\nThe Acela is a fast-ish train - usually.')
+  assert.equal(countOf(out, /<li>/g), 0)
+})
+
+test('v6 bullets: bullet text is escaped', () => {
+  const out = renderAnswer('Head\n- <img src=x onerror="alert(1)">')
+  assert.ok(!out.includes('<img'))
+  assert.match(out, /<li>&lt;img/)
+})

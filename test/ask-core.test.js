@@ -21,9 +21,9 @@ const BOSTON_STATIONS = [
 ]
 const BOSTON_ROUTES = [{ route_long_name: 'Acela', stops: ['Boston', 'New Haven'] }]
 
-test('constants: model is pinned and the prompt version is v4 (home station added)', () => {
+test('constants: model is pinned and the prompt version is v6 (current time added)', () => {
   assert.equal(MODEL, 'claude-sonnet-5-5')
-  assert.equal(PROMPT_VERSION, 'v5')
+  assert.equal(PROMPT_VERSION, 'v6')
 })
 
 test('tool_use then text: runs the real query and returns the full result shape', async () => {
@@ -69,7 +69,7 @@ test('the first request carries the pinned model, system prompt (with today) and
   assert.equal(req.model, MODEL)
   assert.equal(req.system, systemPromptFor(now))
   assert.ok(req.system.startsWith(SYSTEM_PROMPT))
-  assert.match(req.system, /Today is friday 2026-10-23 \(US Eastern time\)\. /)
+  assert.match(req.system, /Today is friday 2026-10-23 and the time now is \d\d:\d\d \(24-hour, US Eastern time\)\. /)
   assert.match(req.system, /home station is New York Penn Station \(NYP\)/)
   assert.deepEqual(req.tools, [SEARCH_TOOL, FIND_TRAINS_TOOL, PLAN_WEEKEND_TOOL])
   assert.deepEqual(req.tools, TOOLS)
@@ -274,6 +274,20 @@ test('the v2 prompt: grounding rule, holiday caveat, Eastern time, no stale "can
 test('systemPromptFor: today is New York today (evening there is still the same day)', () => {
   assert.match(systemPromptFor(new Date('2026-10-24T02:00:00Z')), /Today is friday 2026-10-23/)
   assert.match(systemPromptFor(new Date('2026-10-24T05:00:00Z')), /Today is saturday 2026-10-24/)
+})
+
+test('systemPromptFor: the current time is New York time, 24-hour (v6)', () => {
+  // 16:25 UTC on 2026-10-28 is 12:25 in New York (EDT, UTC-4).
+  assert.match(systemPromptFor(new Date('2026-10-28T16:25:00Z')), /Today is wednesday 2026-10-28 and the time now is 12:25 /)
+  // 03:05 UTC on 2026-10-29 is 23:05 the evening before in New York.
+  assert.match(systemPromptFor(new Date('2026-10-29T03:05:00Z')), /Today is wednesday 2026-10-28 and the time now is 23:05 /)
+  // After the DST change (2026-11-01) New York is UTC-5: 05:05 UTC is 00:05, not 24:05.
+  assert.match(systemPromptFor(new Date('2026-11-03T05:05:00Z')), /Today is tuesday 2026-11-03 and the time now is 00:05 /)
+})
+
+test('SYSTEM_PROMPT tells the model to use the current time for "next train" (v6)', () => {
+  assert.match(SYSTEM_PROMPT, /departAfter set to the current time/)
+  assert.match(FIND_TRAINS_TOOL.input_schema.properties.departAfter.description, /current time from the system prompt/)
 })
 
 test('find_trains tool definition: required inputs and weekday enum', () => {

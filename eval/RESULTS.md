@@ -20,6 +20,7 @@ Columns:
   - `wrong-refusal`: refused when a real answer was available
   - `no-grounding`: no search query about the thing asked, so the answer is ungrounded
   - `wrong-tool`: never called the tool the question needs
+  - `ignored-time`: called the tool without the current time ("next train" with no departAfter)
   - `request-error`: the request itself failed (HTTP/API error)
 - **Failed cases**: ids of the cases that failed (see eval/cases.js).
 
@@ -49,6 +50,17 @@ directly comparable. Existing rows are untouched and are implicitly scorer v1.
   Motivating false negatives, both found in the post-PR-4 run (prompt v3):
 `anchorage-refusal` and `weekend-generic-philadelphia`. Known gaps are listed
   in test/fixtures/scorer-adversarial.js (`knownLimitation`).
+- **v3**: `refusalExpected` / `declineConstraint` read one more pattern
+  (`REFUSAL_PATTERN_EXPECT`): a bare sentence-initial "No." / "No,",
+  "doesn't / does not allow" (boarding restrictions) and "no usable / no boardable".
+  `noRefusal` never reads that pattern, so the "must NOT refuse" direction is
+  unchanged by construction. Motivating false negative, found in the prompt-v5 run:
+  `cardinal-no-boarding-was-nyc`, where a correct grounded answer said no three
+  ways and v2 recognised none of them.
+- **v4**: adds one check, `toolInputHas` (a tool INPUT field is present and well-formed).
+  Every existing check is byte-identical, so the 41 earlier cases score exactly as under v3;
+  only the new case `next-train-uses-current-time` (prompt v6) reads it. Failure type:
+  `ignored-time`. The case count goes 41 -> 42, so pass fractions change denominator.
 
 | Date (UTC) | Mode | Model | Prompt | Pass | By category | Failure types | Failed cases |
 |---|---|---|---|---|---|---|---|
@@ -58,3 +70,4 @@ directly comparable. Existing rows are untouched and are implicitly scorer v1.
 | 2026-10-24T11:37Z | local | claude-sonnet-5-5 | v4 (scorer 2) | 41/41 (100%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 14/14 | - | - |
 | 2026-10-26T11:29Z | local | claude-sonnet-5-5 | v5 (scorer 2) | 40/41 (98%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 13/14 | missed-refusal 1 | cardinal-no-boarding-was-nyc |
 | 2026-10-26T11:47Z | local | claude-sonnet-5-5 | v5 (scorer 3) | 41/41 (100%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 14/14 | - | - |
+| 2026-10-30T11:56Z | local | claude-sonnet-5-5 | v6 (scorer 4) | 42/42 (100%) | easy 9/9, ambiguous 8/8, adversarial 10/10, schedule 15/15 | - | - |
