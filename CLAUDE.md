@@ -317,8 +317,8 @@ text goes back to the model as the tool result so it can correct itself.
     plus a rule: "next train" questions call `find_trains` with today's date and
     `departAfter` = now. Also: separate facts that aren't train rows go on `- ` lines, which
     `renderAnswer` shows as a bulleted list (v5 forbade bullets; the model used them anyway).
-    Current. **Not yet evaluated**: run `npm run eval` (during the day,
-    see the `next-train-uses-current-time` case) before treating it as done.
+    Current. Evaluated 2026-10-30: **42/42** (scorer 4). Run evals during the day: the
+    `next-train-uses-current-time` case can misread "none left today" late at night.
 
 **System prompt rules (v6)** (if you reword them, update `eval/cases.js`, which looks
 for some of these phrases)
@@ -518,6 +518,11 @@ blocked on having enough data to say anything honest.
   things: `cardinal-no-boarding-was-nyc` passes, and **nothing else moved** — the other 40 cases
   scored the same under scorer 2 and scorer 3, so the new phrasings widened nothing. v5 is a
   genuine 41/41; the 40/41 was the measuring instrument.
+- **Prompt v6** (2026-10-30, current NY time + "- " bullets, scorer 4): **42/42 (100%)**, schedule
+  15/15. New case `next-train-uses-current-time` passes; its key check (`toolInputHas`:
+  `find_trains` got an `HH:MM` `departAfter`) is structural, so it can't drift with wording.
+  Two prompt changes were evaluated in one run on purpose; nothing regressed. Known, accepted
+  gap the run can't see: muddled "how many" headlines (`docs/HANDOFF.md`).
 
 **Three of the four recorded eval "failures" so far have been scorer bugs, not model bugs.**
 Read the answer text before believing a failure — and treat the evaluator as something that

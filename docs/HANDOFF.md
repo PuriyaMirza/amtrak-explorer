@@ -69,9 +69,8 @@ Read this first, then `CLAUDE.md` (how to work, architecture) and `docs/PRD.md` 
 
 ## Do first (next session), in order
 
-1. **"Next train" needs the current time** — prompt **v6**. **Built 2026-10-28 (PR "Prompt v6"),
-   decisions 1a + 2a: structural eval check, time in the prompt. Left to do: `npm run eval` on
-   the Mac, during the day, and record the row (baseline to hold: 41/41).** Original notes: "When is
+1. ~~**"Next train" needs the current time**~~ **Done: prompt v6, merged as PR #22 after a
+   42/42 eval run on 2026-10-30** (decisions 1a + 2a). Original notes: "When is
    the next train to New York" got "I don't know the current time": `systemPromptFor` gives
    today's date but not the time. Fix: add the current New York time the same way (server clock,
    never the request — the same injection guard as `today`), plus an eval case that checks a time
