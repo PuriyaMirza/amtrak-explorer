@@ -24,7 +24,7 @@ html { min-height: 100%; overflow-x: clip; background-color: #c4eefc; }
    edge (AllTrails-style). Carries the sky gradient; the inner box keeps the
    720px reading column. */
 .sheet {
-  position: relative; z-index: 1; margin-top: -32px; min-height: 60vh;
+  position: relative; z-index: 1; margin-top: -95px; /* 32px + 15% of the 420px hero */ min-height: 60vh;
   border-radius: 28px 28px 0 0; padding: 32px 16px 48px;
   box-shadow: 0 -6px 24px rgba(26, 24, 86, 0.18);
   background:
@@ -126,13 +126,13 @@ code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-
 
 /* "Your station" picker: top right of the page; above the heading on narrow screens. */
 .home-station {
-  position: absolute; top: 16px; right: 16px; z-index: 5; text-align: right; font-size: 13px;
-  background: rgba(255, 255, 255, 0.72); border-radius: 999px; padding: 4px 4px 4px 14px;
+  position: absolute; top: 12px; right: 12px; z-index: 5; text-align: right; font-size: 11px;
+  background: rgba(255, 255, 255, 0.72); border-radius: 999px; padding: 3px 3px 3px 10px;
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
 #home-station-button {
   font: inherit; font-weight: 500; color: var(--surface-1); background: rgba(255, 255, 255, 0.55);
-  border: 1.5px solid var(--sky-line); border-radius: 999px; padding: 10px 18px; min-height: 44px; margin-left: 6px; cursor: pointer;
+  border: 1px solid var(--sky-line); border-radius: 999px; padding: 5px 11px; min-height: 32px; margin-left: 4px; cursor: pointer;
 }
 #home-station-button[aria-expanded="true"] { background: var(--surface-2); border-color: var(--surface-2); color: var(--surface-4); }
 .home-station-picker {
@@ -145,8 +145,8 @@ code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-
 #home-station-results .status { margin-top: 4px; border: none; }
 @media (max-width: 760px) {
   .hero { height: 300px; }
-  .sheet { margin-top: -28px; border-radius: 24px 24px 0 0; padding-top: 28px; }
-  .home-station { left: 16px; right: auto; text-align: left; }
+  .sheet { margin-top: -73px; /* 28px + 15% of the 300px hero */ border-radius: 24px 24px 0 0; padding-top: 28px; }
+  .home-station { left: 12px; right: auto; text-align: left; }
   .home-station-picker { left: 0; right: auto; width: calc(100vw - 32px); }
   h1 { font-size: 40px; }
   .card { padding: 20px; }
