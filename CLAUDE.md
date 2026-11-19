@@ -104,7 +104,7 @@ events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forge
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
 ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never throws,
                     2s timeout); buildAskMetadata() shapes the metadata
-styles.css          sky-gradient theme + hero photo (fades into the gradient)
+styles.css          sky-gradient theme; hero photo with a rounded-corner content sheet over it
 img/                hero photo, 1600/800 px, WebP + JPEG. Moynihan Train Hall by D. Benjamin
                     Miller, CC0, via Wikimedia Commons (credited in the page footer)
 ask-core.js         askQuestion({anthropic, sql, question}) — the Claude tool loop,
