@@ -6,12 +6,24 @@
   <title>Amtrak Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Cormorant+Garamond:wght@600;700&display=swap">
   <!-- MapLibre's own styles (controls, popups); pinned like the script in map.js. -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.13.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Hero photo (AllTrails-style): full-bleed at the top, with the content sheet
+       (rounded top corners) overlapping its bottom edge. WebP with a JPEG
+       fallback; phones get the 800px file. Credit is in the footer. -->
+  <div class="hero">
+    <picture>
+      <source type="image/webp" srcset="img/penn-hero-800.webp 800w, img/penn-hero-1600.webp 1600w" sizes="100vw">
+      <img src="img/penn-hero-1600.jpg" srcset="img/penn-hero-800.jpg 800w, img/penn-hero-1600.jpg 1600w" sizes="100vw"
+           width="1600" height="800" fetchpriority="high"
+           alt="Moynihan Train Hall at New York Penn Station: a glass roof on steel trusses over a busy concourse">
+    </picture>
+  </div>
+
   <!-- Where questions start when they don't name a station. Remembered in
        this browser; the server only trusts the stop_id after checking it. -->
   <div id="home-station" class="home-station">
@@ -23,6 +35,8 @@
     </div>
   </div>
 
+  <main class="sheet">
+  <div class="sheet-inner">
   <header>
     <p class="eyebrow">AMTRAK GTFS · DIRECT TRAINS</p>
     <h1>Amtrak Explorer</h1>
@@ -65,6 +79,14 @@
     <div id="map" class="map" role="region" aria-label="Map of Amtrak stations"></div>
     <p id="map-status" class="status" hidden></p>
   </section>
+
+  <footer class="credit">
+    Header photo: Moynihan Train Hall, by D. Benjamin Miller,
+    <a href="https://creativecommons.org/publicdomain/zero/1.0/" rel="license noopener" target="_blank">CC0</a>, via
+    <a href="https://commons.wikimedia.org/wiki/File:Moynihan_Train_Hall_interior,_Dec_27_2022.jpg" rel="noopener" target="_blank">Wikimedia Commons</a>.
+  </footer>
+  </div>
+  </main>
 
   <script type="module">
     import { logEvent, deviceId, sessionId } from './events.js'
