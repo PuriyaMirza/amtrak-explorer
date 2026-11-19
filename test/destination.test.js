@@ -144,6 +144,16 @@ test('endpoint: valid request returns the summary from the home station', async 
   assert.deepEqual(legQueries(sql), [['NYP', 'BOS']])
 })
 
+test('endpoint: returns the SQL it ran as queries, ids only as parameters', async () => {
+  const { res } = await call({ to: 'BOS', from: 'NYP', date: '2026-11-20' })
+  assert.equal(res.statusCode, 200)
+  assert.ok(res.body.queries.length >= 1)
+  for (const q of res.body.queries) {
+    assert.ok(!q.text.includes('BOS') && !q.text.includes('NYP'), 'station ids travel as $n params, not in the text')
+  }
+  assert.ok(res.body.queries.some((q) => q.params.includes('BOS')))
+})
+
 test('endpoint: a bad or unknown `from` falls back to New York Penn (same guard as the ask box)', async () => {
   for (const from of ['ZZZ', 'NYP; drop table stops', '<img src=x>', 'Boston South Station']) {
     const { res, sql } = await call({ to: 'BOS', from, date: '2026-10-29' })

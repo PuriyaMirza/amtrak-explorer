@@ -102,6 +102,10 @@ tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry,
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
                     also exports deviceId/sessionId (index.html sends them to /api/ask)
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
+query-log.js        withQueryLog(sql) — wraps the injected client and records each query
+                    ({text with $n, params, ms, rows}) for the page's "</>" panel. Every
+                    endpoint returns it as `queries`; never sent to the model, not logged.
+                    sql.query() (the events insert) passes through unrecorded
 ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never throws,
                     2s timeout); buildAskMetadata() shapes the metadata
 styles.css          sky-gradient theme; hero photo with a rounded-corner content sheet over it
@@ -261,7 +265,8 @@ absence of errors.
 
 ## The AI layer (`api/ask.js`)
 
-POST `{ question }` → `{ answer, toolCalls }`
+POST `{ question }` → `{ answer, toolCalls, model, promptVersion, queries }` (`queries`: the SQL
+the tools ran, from `withQueryLog`; attached after the loop, never in a prompt)
 
 **The whole design in one sentence:** the model never touches the facts.
 
