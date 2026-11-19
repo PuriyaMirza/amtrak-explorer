@@ -97,6 +97,9 @@ map.js              the station map (card 03): MapLibre GL JS 6.13.0 (ES module,
                     setDOMContent (never HTML). previewModel()/stationsGeoJSON() pure/tested
 home-station.js     DEFAULT_HOME_STATION (NYP) + load/saveHomeStation(localStorage) for
                     the picker; shared by browser and ask-core.js (pure; unit-tested)
+sql-panel.js        buildSqlPanel(queries) — the "</>" toggle (<details>) under search results,
+                    the destination header and ask answers; textContent only. sqlPanelModel()
+                    and formatParam() are pure/tested
 tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown
                     under ask answers (pure; unit-tested)
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
