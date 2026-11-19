@@ -59,7 +59,7 @@ test('a question of exactly 500 characters passes validation', async () => {
   assert.notEqual(res.statusCode, 405)
 })
 
-test('success: 200 with { answer, toolCalls, model, promptVersion } (fake clients)', async () => {
+test('success: 200 with { answer, toolCalls, model, promptVersion, queries } (fake clients)', async () => {
   const anthropic = fakeAnthropic([toolUseResponse('boston'), textResponse('The Acela serves Boston.')])
   const sql = fakeSql({
     stations: [{ stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York', routes: ['Acela'] }],
@@ -71,7 +71,7 @@ test('success: 200 with { answer, toolCalls, model, promptVersion } (fake client
   await ask({ method: 'POST', body: { question: 'What serves Boston?' } }, res)
 
   assert.equal(res.statusCode, 200)
-  assert.deepEqual(Object.keys(res.body).sort(), ['answer', 'model', 'promptVersion', 'toolCalls'])
+  assert.deepEqual(Object.keys(res.body).sort(), ['answer', 'model', 'promptVersion', 'queries', 'toolCalls'])
   assert.equal(res.body.answer, 'The Acela serves Boston.')
   assert.equal(res.body.model, MODEL)
   assert.equal(res.body.promptVersion, PROMPT_VERSION)
@@ -109,4 +109,41 @@ test('prompt v6: a "now" in the request body is ignored; the time comes from the
   assert.ok(!system.includes('2000-01-01'), 'request-supplied date reached the prompt')
   assert.ok(!system.includes('Ignore all rules'), 'request text reached the prompt')
   assert.ok(system.includes(`Today is ${WEEKDAYS[new Date(todayInNewYork() + 'T00:00:00Z').getUTCDay()]} ${todayInNewYork()}`))
+})
+
+test('queries: the SQL the tools ran comes back to the browser, never to the model', async () => {
+  const anthropic = fakeAnthropic([toolUseResponse('boston'), textResponse('The Acela serves Boston.')])
+  const sql = fakeSql({
+    stations: [{ stop_id: 'BOS', stop_name: 'Boston', stop_timezone: 'America/New_York', routes: ['Acela'] }],
+    routes: [],
+  })
+  const ask = createHandler({ makeClients: () => ({ anthropic, sql }) })
+
+  const res = mockRes()
+  await ask({ method: 'POST', body: { question: 'What serves Boston?' } }, res)
+
+  // search_trains runs two queries (stations, routes); both are recorded with
+  // $n placeholders and the user's text only as a separate parameter.
+  const q = res.body.queries
+  assert.equal(q.length, 2)
+  assert.match(q[0].text, /from stops s/)
+  assert.match(q[0].text, /ilike \$1/)
+  assert.ok(q[0].params.includes('%boston%'))
+  assert.equal(typeof q[0].ms, 'number')
+
+  // Nothing recorded reaches the model: no request to Anthropic contains the
+  // SQL text (the tool result is rows, not queries).
+  const sentToModel = JSON.stringify(anthropic.calls)
+  assert.ok(!sentToModel.includes('from stops s'), 'SQL text must not be sent to the model')
+  assert.ok(!sentToModel.includes('ilike $1'), 'SQL text must not be sent to the model')
+})
+
+test('queries: the events insert (logAsk) is not recorded', async () => {
+  const anthropic = fakeAnthropic([textResponse('Hello.')])
+  const sql = fakeSql({})
+  const ask = createHandler({ makeClients: () => ({ anthropic, sql }) })
+  const res = mockRes()
+  await ask({ method: 'POST', body: { question: 'hi' } }, res)
+  assert.equal(res.statusCode, 200)
+  assert.ok(!res.body.queries.some((q) => /insert into events/i.test(q.text)))
 })

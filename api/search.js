@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import { searchTrains } from '../search.js'
+import { withQueryLog } from '../query-log.js'
 
 const MAX_LIMIT = 50
 
@@ -18,9 +19,10 @@ export default async function handler(req, res) {
   const limit = Math.min(Math.max(requested, 1), MAX_LIMIT)
 
   try {
-    const sql = neon(process.env.DATABASE_URL)
+    // withQueryLog records the SQL searchTrains runs, for the page's "</>" panel.
+    const { sql, queries } = withQueryLog(neon(process.env.DATABASE_URL))
     const data = await searchTrains(sql, { query: query.trim(), limit })
-    return res.status(200).json(data)
+    return res.status(200).json({ ...data, queries })
   } catch (err) {
     console.error('search failed:', err)
     return res.status(500).json({ error: err.message })

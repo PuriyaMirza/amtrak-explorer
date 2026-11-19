@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { neon } from '@neondatabase/serverless'
 import { askQuestion } from '../ask-core.js'
 import { logAsk } from '../ask-log.js'
+import { withQueryLog } from '../query-log.js'
 
 // Cheap guardrail, even behind SSO: a longer question is almost certainly a
 // mistake (or someone pasting a document), and every character costs tokens.
@@ -53,11 +54,16 @@ export function createHandler({ makeClients }) {
 
     try {
       const { anthropic, sql } = makeClients()
+      // Record the SQL the tools run, for the page's "</>" panel. The recorded
+      // list is returned to the browser only: it is never put in a prompt or
+      // sent to the model (askQuestion just sees a working sql client), and it
+      // is not written to the events row.
+      const recorder = withQueryLog(sql)
 
       const startedAt = Date.now()
       let result
       try {
-        result = await askQuestion({ anthropic, sql, question, homeStation })
+        result = await askQuestion({ anthropic, sql: recorder.sql, question, homeStation })
       } catch (err) {
         // Log the failed ask too, then let the outer catch send the 500.
         await logAsk(sql, {
@@ -76,7 +82,7 @@ export function createHandler({ makeClients }) {
 
       // model + promptVersion are extra fields: the browser ignores them, but
       // a remote eval run (ASK_URL mode) uses them to label its RESULTS.md row.
-      return res.status(200).json({ answer, toolCalls, model, promptVersion })
+      return res.status(200).json({ answer, toolCalls, model, promptVersion, queries: recorder.queries })
     } catch (err) {
       console.error('ask handler failed:', err)
       return res.status(500).json({ error: err.message })

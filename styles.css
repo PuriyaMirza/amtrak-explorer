@@ -211,3 +211,28 @@ code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-
   font: inherit; font-size: 12px; font-weight: 700; color: var(--surface-4); background: var(--surface-2);
   border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; margin-top: 4px;
 }
+
+/* "</>" SQL panel (sql-panel.js): a native <details> toggle under results. */
+.sql-panel { margin-top: 14px; font-size: 12px; }
+.sql-toggle {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
+  font-weight: 700; color: var(--surface-2); background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--sky-line); border-radius: 999px; padding: 6px 12px; min-height: 32px;
+}
+.sql-toggle::-webkit-details-marker { display: none; }
+.sql-toggle:focus-visible { outline: 2px solid var(--surface-2); outline-offset: 2px; }
+.sql-panel[open] .sql-toggle { background: var(--surface-2); color: var(--surface-4); border-color: var(--surface-2); }
+.sql-icon { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sql-query { margin-top: 12px; }
+.sql-meta { margin: 0 0 4px; font-weight: 700; opacity: 0.8; }
+.sql-text {
+  margin: 0; padding: 10px 12px; border-radius: 8px; overflow-x: auto;
+  background: var(--surface-1); color: var(--surface-4);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre;
+}
+.sql-params { margin: 6px 0 0; padding: 0; list-style: none; }
+.sql-params li {
+  padding: 2px 0; border: none; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.sql-note { margin: 10px 0 0; opacity: 0.75; }

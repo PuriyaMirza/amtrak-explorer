@@ -97,11 +97,18 @@ map.js              the station map (card 03): MapLibre GL JS 6.13.0 (ES module,
                     setDOMContent (never HTML). previewModel()/stationsGeoJSON() pure/tested
 home-station.js     DEFAULT_HOME_STATION (NYP) + load/saveHomeStation(localStorage) for
                     the picker; shared by browser and ask-core.js (pure; unit-tested)
+sql-panel.js        buildSqlPanel(queries) — the "</>" toggle (<details>) under search results,
+                    the destination header and ask answers; textContent only. sqlPanelModel()
+                    and formatParam() are pure/tested
 tool-labels.js      formatToolCall(call) — one-line label per toolCalls entry, shown
                     under ask answers (pure; unit-tested)
 events.js           logEvent(type, fields) — POSTs to /api/log, fire-and-forget;
                     also exports deviceId/sessionId (index.html sends them to /api/ask)
 event-store.js      insertEvent(sql, fields) — the ONE events insert + column whitelist
+query-log.js        withQueryLog(sql) — wraps the injected client and records each query
+                    ({text with $n, params, ms, rows}) for the page's "</>" panel. Every
+                    endpoint returns it as `queries`; never sent to the model, not logged.
+                    sql.query() (the events insert) passes through unrecorded
 ask-log.js          logAsk(sql, ...) — writes the 'ask' events row (never throws,
                     2s timeout); buildAskMetadata() shapes the metadata
 styles.css          sky-gradient theme; hero photo with a rounded-corner content sheet over it
@@ -261,7 +268,8 @@ absence of errors.
 
 ## The AI layer (`api/ask.js`)
 
-POST `{ question }` → `{ answer, toolCalls }`
+POST `{ question }` → `{ answer, toolCalls, model, promptVersion, queries }` (`queries`: the SQL
+the tools ran, from `withQueryLog`; attached after the loop, never in a prompt)
 
 **The whole design in one sentence:** the model never touches the facts.
 

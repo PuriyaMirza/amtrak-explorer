@@ -91,6 +91,7 @@
   <script type="module">
     import { logEvent, deviceId, sessionId } from './events.js'
     import { formatToolCall } from './tool-labels.js'
+    import { buildSqlPanel } from './sql-panel.js'
     import { loadHomeStation, saveHomeStation, stationFromSearchRow } from './home-station.js'
 
     // ---- Home station picker ----
@@ -240,8 +241,16 @@
       return sections.join('')
     }
 
+    // Adds the "</>" panel (sql-panel.js) showing the SQL the request ran.
+    // Built with textContent only; appended after any innerHTML is set.
+    function appendSqlPanel(container, queries) {
+      const panel = buildSqlPanel(queries)
+      if (panel) container.append(panel)
+    }
+
     function render(data, queryId) {
       results.innerHTML = searchResultsHtml(data, queryId)
+      appendSqlPanel(results, data.queries)
     }
 
     // The destination header (PRD §7.1 B3) for one /api/destination response.
@@ -352,7 +361,10 @@
         const res = await fetch(`/api/destination?${params}`)
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || `Lookup failed (${res.status})`)
-        if (mine === destinationRequest) destination.innerHTML = destinationHtml(data)
+        if (mine === destinationRequest) {
+          destination.innerHTML = destinationHtml(data)
+          appendSqlPanel(destination, data.queries)
+        }
       } catch (err) {
         if (mine === destinationRequest) destination.innerHTML = `<p class="status error">Error: ${escapeHtml(err.message)}</p>`
       }
@@ -508,6 +520,7 @@
         }
 
         askResults.innerHTML = parts.join('')
+        appendSqlPanel(askResults, data.queries)
       } catch (err) {
         askResults.innerHTML = `<p class="status error">Error: ${escapeHtml(err.message)}</p>`
       } finally {

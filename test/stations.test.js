@@ -59,6 +59,14 @@ test('endpoint: 200 with { stations } and an edge-cache header', async () => {
   assert.match(res.headers['cache-control'], /s-maxage=86400/)
 })
 
+test('endpoint: returns the SQL it ran as queries (text with no request input)', async () => {
+  const res = mockRes()
+  await createHandler({ makeSql: () => fakeSql(ROWS) })({ method: 'GET', query: {} }, res)
+  assert.equal(res.body.queries.length, 1)
+  assert.match(res.body.queries[0].text, /^select/i)
+  assert.equal(res.body.queries[0].rows, ROWS.length) // rows the database returned, before junk names are dropped
+})
+
 test('endpoint: a database error is a 500 with the message, and is not cached', async () => {
   const res = mockRes()
   await createHandler({ makeSql: () => fakeSql([], { fail: 'db down' }) })({ method: 'GET', query: {} }, res)

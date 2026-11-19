@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 import { destinationSummary } from '../destination.js'
 import { resolveHomeStation } from '../ask-core.js'
+import { withQueryLog } from '../query-log.js'
 
 // GET /api/destination?to=PHL[&from=NYP][&date=2026-10-31]
 //   → destinationSummary (destination.js): the destination header numbers.
@@ -32,10 +33,11 @@ export function createHandler({ makeSql }) {
     }
 
     try {
-      const sql = makeSql()
+      // withQueryLog records the SQL that runs, for the page's "</>" panel.
+      const { sql, queries } = withQueryLog(makeSql())
       const home = await resolveHomeStation(sql, typeof req.query?.from === 'string' ? req.query.from : undefined)
       const data = await destinationSummary(sql, { from: home.stop_id, to, date })
-      return res.status(200).json(data)
+      return res.status(200).json({ ...data, queries })
     } catch (err) {
       console.error('destination failed:', err)
       return res.status(500).json({ error: err.message })
